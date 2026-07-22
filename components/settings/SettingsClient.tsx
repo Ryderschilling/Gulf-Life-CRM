@@ -21,7 +21,7 @@ interface IntegrationStatus {
 interface StatusMap {
   supabase: IntegrationStatus
   openai: IntegrationStatus
-  resend: IntegrationStatus
+  gmail: IntegrationStatus
   quo: IntegrationStatus
   mailchimp: IntegrationStatus
 }
@@ -29,7 +29,7 @@ interface StatusMap {
 const INTEGRATIONS: { key: keyof StatusMap; name: string; what: string; icon: React.ReactNode; env: string }[] = [
   { key: 'supabase', name: 'Database', what: 'Stores all leads, notes, and activity', icon: <Database size={17} />, env: 'NEXT_PUBLIC_SUPABASE_URL' },
   { key: 'openai', name: 'AI (OpenAI)', what: 'Powers the assistant, drafts, and daily briefing', icon: <Bot size={17} />, env: 'OPENAI_API_KEY' },
-  { key: 'resend', name: 'Email (Resend)', what: 'Sends 1-on-1 emails to leads', icon: <Mail size={17} />, env: 'RESEND_API_KEY' },
+  { key: 'gmail', name: 'Email (Gulf Life mailbox)', what: 'Sends + receives as Host@LiveGulfLife.com via Gmail', icon: <Mail size={17} />, env: 'GMAIL_USER + GMAIL_APP_PASSWORD' },
   { key: 'quo', name: 'Texting (Quo)', what: "Sends texts from John's Quo number", icon: <MessageSquare size={17} />, env: 'QUO_API_KEY + QUO_FROM_NUMBER' },
   { key: 'mailchimp', name: 'Mailchimp', what: 'Syncs homeowner leads into the campaign audience', icon: <Megaphone size={17} />, env: 'MAILCHIMP_API_KEY + MAILCHIMP_AUDIENCE_ID' },
 ]

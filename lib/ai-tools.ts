@@ -11,7 +11,7 @@ import type { AIActionResult, Lead } from './types'
 import { sendQuoSms, quoConfigured } from './quo'
 import { syncLeadToMailchimp, mailchimpConfigured } from './mailchimp'
 import { toE164 } from './utils'
-import { getResend, RESEND_FROM, REPLY_TO } from './resend'
+import { sendEmail, mailerConfigured } from './mailer'
 
 // ── Tool specs (OpenAI function-calling format) ─────────────
 export const AI_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -598,16 +598,13 @@ export async function executeAITool(
         const res = await resolveLead(supabase, String(args.lead_ref))
         if (!res.lead) return { result: J({ error: res.error, candidates: res.candidates }) }
         if (!res.lead.email) return { result: J({ error: `${res.lead.name} has no email address` }) }
-        const resend = getResend()
-        if (!resend) return { result: J({ error: 'Resend (email) is not configured' }) }
-        const { error: sendErr } = await resend.emails.send({
-          from: RESEND_FROM,
+        if (!mailerConfigured()) return { result: J({ error: 'Email is not configured yet (set GMAIL_USER + GMAIL_APP_PASSWORD)' }) }
+        const sent = await sendEmail({
           to: res.lead.email,
           subject: String(args.subject),
           text: String(args.body),
-          ...(REPLY_TO ? { replyTo: REPLY_TO } : {}),
         })
-        if (sendErr) return { result: J({ error: `Email failed: ${sendErr.message}` }), action: { tool: 'send_email', summary: `Email to ${res.lead.name} FAILED`, ok: false, lead_id: res.lead.id } }
+        if (sent.error) return { result: J({ error: `Email failed: ${sent.error}` }), action: { tool: 'send_email', summary: `Email to ${res.lead.name} FAILED`, ok: false, lead_id: res.lead.id } }
         await supabase.from('email_drafts').insert({
           lead_id: res.lead.id, to_email: res.lead.email, to_name: res.lead.name,
           subject: String(args.subject), body: String(args.body),

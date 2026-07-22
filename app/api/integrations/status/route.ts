@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { quoConfigured, listQuoNumbers, quoFromNumber } from '@/lib/quo'
 import { mailchimpConfigured, getMailchimpAudienceInfo } from '@/lib/mailchimp'
-import { resendConfigured, FROM_EMAIL } from '@/lib/resend'
+import { mailerConfigured, FROM_EMAIL } from '@/lib/mailer'
 
 export async function GET() {
   const supabase = await createClient()
@@ -54,10 +54,10 @@ export async function GET() {
       ok: !!process.env.OPENAI_API_KEY,
       detail: process.env.OPENAI_API_KEY ? 'AI drafts, chat & digest enabled' : 'Add OPENAI_API_KEY',
     },
-    resend: {
-      configured: resendConfigured(),
-      ok: resendConfigured(),
-      detail: resendConfigured() ? `Sending from ${FROM_EMAIL}` : 'Add RESEND_API_KEY',
+    gmail: {
+      configured: mailerConfigured(),
+      ok: mailerConfigured(),
+      detail: mailerConfigured() ? `Sending + receiving as ${FROM_EMAIL}` : 'Add GMAIL_USER + GMAIL_APP_PASSWORD',
     },
     quo,
     mailchimp,

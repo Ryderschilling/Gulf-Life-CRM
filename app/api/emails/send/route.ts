@@ -2,13 +2,15 @@
 // Two modes:
 //   1. Review-queue send:  { draft_id, subject?, body? }  → sends an existing draft
 //   2. Direct send:        { lead_id, subject, body }     → composes + sends now
-// Reply-To is set to RESEND_REPLY_TO so client replies route back to the CRM.
+// Mail goes out through the Gulf Life mailbox (Gmail SMTP as
+// Host@LiveGulfLife.com — see lib/mailer.ts), so replies return to the
+// real inbox and are pulled into the CRM by /api/email/poll.
 // The email body is sent as-is (the drafted/typed body already contains the
 // signature from the Communication Style brain file — no auto-append here).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getResend, FROM, REPLY_TO } from '@/lib/resend'
+import { sendEmail, mailerConfigured } from '@/lib/mailer'
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,9 +27,8 @@ export async function POST(req: NextRequest) {
       body?: string
     }
 
-    const resend = getResend()
-    if (!resend) {
-      return NextResponse.json({ error: 'Email sending is not configured (RESEND_API_KEY missing)' }, { status: 400 })
+    if (!mailerConfigured()) {
+      return NextResponse.json({ error: 'Email sending is not configured (set GMAIL_USER + GMAIL_APP_PASSWORD)' }, { status: 400 })
     }
 
     const now = new Date().toISOString()
@@ -42,15 +43,9 @@ export async function POST(req: NextRequest) {
       if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
       if (!lead.email) return NextResponse.json({ error: `${lead.name} has no email address` }, { status: 422 })
 
-      const { data: sent, error: sendError } = await resend.emails.send({
-        from: FROM,
-        to: [lead.email],
-        subject: subject.trim(),
-        text: body.trim(),
-        ...(REPLY_TO ? { replyTo: REPLY_TO } : {}),
-      })
-      if (sendError) {
-        return NextResponse.json({ error: 'Failed to send email', details: sendError }, { status: 502 })
+      const sent = await sendEmail({ to: lead.email, subject: subject.trim(), text: body.trim() })
+      if (sent.error) {
+        return NextResponse.json({ error: 'Failed to send email', details: sent.error }, { status: 502 })
       }
 
       await Promise.all([
@@ -58,10 +53,10 @@ export async function POST(req: NextRequest) {
         supabase.from('lead_activities').insert({
           lead_id, type: 'email_sent', user_id: user.id,
           body: `Email sent: "${subject.trim()}"`,
-          metadata: { resend_id: sent?.id },
+          metadata: { message_id: sent.id },
         }),
       ])
-      return NextResponse.json({ success: true, resend_id: sent?.id })
+      return NextResponse.json({ success: true, message_id: sent.id })
     }
 
     // ── Mode 1: send an existing draft from the review queue ──
@@ -86,17 +81,11 @@ export async function POST(req: NextRequest) {
     const finalSubject = editedSubject ?? draft.subject
     const finalBody = editedBody ?? draft.body
 
-    const { data: sent, error: sendError } = await resend.emails.send({
-      from: FROM,
-      to: [draft.to_email],
-      subject: finalSubject,
-      text: finalBody,
-      ...(REPLY_TO ? { replyTo: REPLY_TO } : {}),
-    })
+    const sent = await sendEmail({ to: draft.to_email, subject: finalSubject, text: finalBody })
 
-    if (sendError) {
-      console.error('Resend error:', sendError)
-      return NextResponse.json({ error: 'Failed to send email', details: sendError }, { status: 502 })
+    if (sent.error) {
+      console.error('Email send error:', sent.error)
+      return NextResponse.json({ error: 'Failed to send email', details: sent.error }, { status: 502 })
     }
 
     await supabase
@@ -110,7 +99,7 @@ export async function POST(req: NextRequest) {
       lead_id: draft.lead_id,
       type: 'email_sent',
       body: `Email sent: "${finalSubject}"`,
-      metadata: { draft_id, resend_id: sent?.id },
+      metadata: { draft_id, message_id: sent.id },
       user_id: user.id,
     })
 
@@ -120,7 +109,7 @@ export async function POST(req: NextRequest) {
       .eq('linked_draft_id', draft_id)
       .eq('is_completed', false)
 
-    return NextResponse.json({ success: true, resend_id: sent?.id })
+    return NextResponse.json({ success: true, message_id: sent.id })
   } catch (err) {
     console.error('[POST /api/emails/send]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

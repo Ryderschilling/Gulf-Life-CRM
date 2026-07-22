@@ -15,7 +15,7 @@ A sales + guest-marketing CRM with AI that can take actions. Two record types li
 - **Next.js 16** (App Router, Turbopack) + TypeScript + Tailwind v3
 - **Supabase** — Postgres, auth (email/password), RLS on
 - **OpenAI `gpt-4o`** — agentic AI chat (function calling), email drafts, daily briefing
-- **Resend** — 1:1 transactional email (domain thriveco.net, verified)
+- **Gmail (Gulf Life mailbox)** — 1:1 email as `Host@LiveGulfLife.com` (Google Workspace). Outbound: Gmail SMTP w/ app password (`lib/mailer.ts`). Inbound: `/api/email/poll` reads the mailbox over IMAP (last 7 days, lead-matched only, Message-ID deduped, never marks mail read) — triggered by the Inbox UI on open + every 60s. Replies also stay in the real Gmail inbox/Sent, so John sees everything there too. NO third-party email service; never send Gulf Life mail from another client's domain (Resend/thriveco.net was removed Jul 22 for exactly that reason).
 - **Quo** (formerly OpenPhone) — SMS. John's number lives in Quo, so we use the Quo API (`https://api.quo.com/v1`, header `Authorization: <API_KEY>` — no Bearer prefix), NOT raw Twilio
 - **Mailchimp** — marketing audience sync (member upsert + tags by type/stage)
 - **papaparse** — client-side CSV parsing for the import wizard
@@ -66,7 +66,7 @@ Server (`app/api/import/route.ts`): 3 actions (start/rows/finish). Dedupes by em
 
 ## Environment (`.env.local` — never commit)
 
-Set: Supabase URL/anon/service-role, OPENAI_API_KEY, RESEND_API_KEY (+from). Empty until Ryder gets keys: `QUO_API_KEY`, `QUO_FROM_NUMBER` (Quo app → Settings → API), `MAILCHIMP_API_KEY`, `MAILCHIMP_AUDIENCE_ID`. All integrations degrade gracefully when unconfigured; Settings page shows live status.
+Set: Supabase URL/anon/service-role, OPENAI_API_KEY, `QUO_API_KEY` + `QUO_FROM_NUMBER` (+ optional `QUO_WEBHOOK_SECRET`), `MAILCHIMP_API_KEY` + `MAILCHIMP_AUDIENCE_ID`. Email: `GMAIL_USER` + `GMAIL_APP_PASSWORD` (Google app password for the Gulf Life mailbox; requires 2-Step Verification) + optional `EMAIL_FROM_ADDRESS`/`EMAIL_FROM_NAME`. All integrations degrade gracefully when unconfigured; Settings page shows live status. Mirror everything into Vercel env (Next reads env at boot — restart dev / redeploy after changes).
 
 ## Remaining To Launch
 

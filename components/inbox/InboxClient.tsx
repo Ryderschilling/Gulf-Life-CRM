@@ -48,6 +48,17 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
     return () => clearInterval(t)
   }, [router])
 
+  // Inbound email — ask the server to pull new mail from the Gulf Life
+  // mailbox (Gmail IMAP) on open + every 60s. Cheap + idempotent.
+  useEffect(() => {
+    const poll = () => {
+      if (document.visibilityState === 'visible') fetch('/api/email/poll', { method: 'POST' }).catch(() => {})
+    }
+    poll()
+    const t = setInterval(poll, 60_000)
+    return () => clearInterval(t)
+  }, [])
+
   const convos = useMemo(() => {
     const map = new Map<string, Convo>()
     const push = (leadId: string, lead: LeadLite | null, item: Item) => {
