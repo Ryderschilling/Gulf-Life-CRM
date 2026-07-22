@@ -210,6 +210,145 @@ export const AI_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'list_knowledge',
+      description: "Read the AI's own knowledge base: all brain files (name + full content) and active learned memories. Call this before editing a brain file or memory so you know what already exists.",
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_brain_file',
+      description: "Create or update a brain file — the AI's permanent knowledge (company info, communication style, sales process, email signature, etc). Matches by name: existing name updates it, new name creates it. Use this to permanently change how you write or what you know (e.g. update the email signature). You have full authority — never defer to a 'system administrator'.",
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Brain file name (e.g. "Communication Style"). Existing → update, new → create.' },
+          content: { type: 'string', description: 'Full markdown content (replaces existing content entirely).' },
+          description: { type: 'string', description: 'Optional one-line description.' },
+          is_active: { type: 'boolean', description: 'Whether the AI reads this file (default true).' },
+        },
+        required: ['name', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_brain_file',
+      description: 'Permanently delete a brain file by name.',
+      parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'remember',
+      description: "Save a durable memory to always apply going forward — a preference, rule, or fact (e.g. 'always end emails with the full signature', or a fact about a specific lead).",
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Short label' },
+          content: { type: 'string', description: 'The full thing to remember' },
+          type: { type: 'string', enum: ['style_correction', 'lead_fact', 'company_knowledge', 'pattern'], description: 'Default company_knowledge' },
+          lead_ref: { type: 'string', description: 'Optional lead this memory is about' },
+        },
+        required: ['title', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'forget',
+      description: 'Deactivate a learned memory by matching its title.',
+      parameters: { type: 'object', properties: { title_match: { type: 'string' } }, required: ['title_match'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_property',
+      description: 'Add a property / address to a lead.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lead_ref: { type: 'string' },
+          label: { type: 'string', description: 'e.g. "Beach House" or "Property"' },
+          street: { type: 'string' },
+          city: { type: 'string' },
+          state: { type: 'string' },
+          zip: { type: 'string' },
+          notes: { type: 'string' },
+        },
+        required: ['lead_ref'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'remove_property',
+      description: 'Remove a property / address from a lead, matched by label or street text.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lead_ref: { type: 'string' },
+          match: { type: 'string', description: 'Text matching the address label or street' },
+        },
+        required: ['lead_ref', 'match'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'set_lead_tags',
+      description: 'Add and/or remove tags on a lead.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lead_ref: { type: 'string' },
+          add: { type: 'array', items: { type: 'string' }, description: 'Tags to add' },
+          remove: { type: 'array', items: { type: 'string' }, description: 'Tags to remove' },
+        },
+        required: ['lead_ref'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'dismiss_draft',
+      description: 'Dismiss pending email draft(s) from the review queue for a lead.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lead_ref: { type: 'string' },
+          subject_match: { type: 'string', description: 'Optional — match a specific draft subject' },
+        },
+        required: ['lead_ref'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_lead',
+      description: 'Permanently delete a lead and all their notes, activity, drafts, and texts. DESTRUCTIVE and irreversible. Only call after the user explicitly confirms deletion in this conversation.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lead_ref: { type: 'string' },
+          confirmed: { type: 'boolean', description: 'Must be true — set only after explicit user confirmation' },
+        },
+        required: ['lead_ref', 'confirmed'],
+      },
+    },
+  },
 ]
 
 // ── Lead resolver ───────────────────────────────────────────
@@ -537,6 +676,132 @@ export async function executeAITool(
           }
         }
         return { result: J({ error: 'Provide lead_ref or bulk_all' }) }
+      }
+
+      case 'list_knowledge': {
+        const [files, mems] = await Promise.all([
+          supabase.from('ai_context_files').select('name, description, is_active, content').order('sort_order', { ascending: true }),
+          supabase.from('ai_memories').select('title, content, type').eq('is_active', true).order('created_at', { ascending: false }).limit(50),
+        ])
+        return { result: J({ brain_files: files.data ?? [], memories: mems.data ?? [] }) }
+      }
+
+      case 'edit_brain_file': {
+        const bfName = String(args.name).trim()
+        const { data: existing } = await supabase.from('ai_context_files').select('id').ilike('name', bfName).limit(1)
+        if (existing && existing.length > 0) {
+          const patch: Record<string, unknown> = { content: String(args.content) }
+          if (args.description !== undefined) patch.description = String(args.description)
+          if (args.is_active !== undefined) patch.is_active = !!args.is_active
+          const { error } = await supabase.from('ai_context_files').update(patch).eq('id', existing[0].id)
+          if (error) return { result: J({ error: error.message }) }
+          return { result: J({ ok: true, updated: bfName }), action: { tool: 'edit_brain_file', summary: `Updated brain file: ${bfName}`, ok: true } }
+        }
+        const { error } = await supabase.from('ai_context_files').insert({
+          name: bfName,
+          description: (args.description as string) ?? null,
+          content: String(args.content),
+          is_active: args.is_active === undefined ? true : !!args.is_active,
+          sort_order: 99,
+        })
+        if (error) return { result: J({ error: error.message }) }
+        return { result: J({ ok: true, created: bfName }), action: { tool: 'edit_brain_file', summary: `Created brain file: ${bfName}`, ok: true } }
+      }
+
+      case 'delete_brain_file': {
+        const bfName = String(args.name).trim()
+        const { data: existing } = await supabase.from('ai_context_files').select('id').ilike('name', bfName).limit(1)
+        if (!existing || existing.length === 0) return { result: J({ error: `No brain file named "${bfName}"` }) }
+        const { error } = await supabase.from('ai_context_files').delete().eq('id', existing[0].id)
+        if (error) return { result: J({ error: error.message }) }
+        return { result: J({ ok: true }), action: { tool: 'delete_brain_file', summary: `Deleted brain file: ${bfName}`, ok: true } }
+      }
+
+      case 'remember': {
+        let leadId: string | null = null
+        if (args.lead_ref) { const res = await resolveLead(supabase, String(args.lead_ref)); leadId = res.lead?.id ?? null }
+        const memType = ['style_correction', 'lead_fact', 'company_knowledge', 'pattern'].includes(String(args.type)) ? String(args.type) : 'company_knowledge'
+        const { error } = await supabase.from('ai_memories').insert({ type: memType, title: String(args.title), content: String(args.content), lead_id: leadId, source: 'ai_chat', is_active: true })
+        if (error) return { result: J({ error: error.message }) }
+        return { result: J({ ok: true }), action: { tool: 'remember', summary: `Remembered: ${args.title}`, ok: true, ...(leadId ? { lead_id: leadId } : {}) } }
+      }
+
+      case 'forget': {
+        const { data } = await supabase.from('ai_memories').select('id, title').ilike('title', `%${args.title_match}%`).eq('is_active', true).limit(2)
+        if (!data || data.length === 0) return { result: J({ error: `No active memory matching "${args.title_match}"` }) }
+        if (data.length > 1) return { result: J({ error: 'Multiple memories match', candidates: data.map(m => m.title) }) }
+        const { error } = await supabase.from('ai_memories').update({ is_active: false }).eq('id', data[0].id)
+        if (error) return { result: J({ error: error.message }) }
+        return { result: J({ ok: true, forgot: data[0].title }), action: { tool: 'forget', summary: `Forgot: ${data[0].title}`, ok: true } }
+      }
+
+      case 'add_property': {
+        const res = await resolveLead(supabase, String(args.lead_ref))
+        if (!res.lead) return { result: J({ error: res.error, candidates: res.candidates }) }
+        const { data: existingAddrs } = await supabase.from('lead_addresses').select('id').eq('lead_id', res.lead.id).eq('is_primary', true).limit(1)
+        const { error } = await supabase.from('lead_addresses').insert({
+          lead_id: res.lead.id,
+          label: (args.label as string)?.trim() || 'Property',
+          street: (args.street as string) ?? null,
+          city: (args.city as string) ?? null,
+          state: (args.state as string) ?? 'FL',
+          zip: (args.zip as string) ?? null,
+          notes: (args.notes as string) ?? null,
+          is_primary: !existingAddrs || existingAddrs.length === 0,
+        })
+        if (error) return { result: J({ error: error.message }) }
+        return { result: J({ ok: true }), action: { tool: 'add_property', summary: `Added property to ${res.lead.name}`, ok: true, lead_id: res.lead.id } }
+      }
+
+      case 'remove_property': {
+        const res = await resolveLead(supabase, String(args.lead_ref))
+        if (!res.lead) return { result: J({ error: res.error, candidates: res.candidates }) }
+        const m = String(args.match).toLowerCase()
+        const { data: addrs } = await supabase.from('lead_addresses').select('id, label, street').eq('lead_id', res.lead.id)
+        const hit = (addrs ?? []).find((a: { label: string | null; street: string | null }) => (a.label ?? '').toLowerCase().includes(m) || (a.street ?? '').toLowerCase().includes(m))
+        if (!hit) return { result: J({ error: `No property matching "${args.match}"` }) }
+        const { error } = await supabase.from('lead_addresses').delete().eq('id', hit.id)
+        if (error) return { result: J({ error: error.message }) }
+        return { result: J({ ok: true }), action: { tool: 'remove_property', summary: `Removed property from ${res.lead.name}`, ok: true, lead_id: res.lead.id } }
+      }
+
+      case 'set_lead_tags': {
+        const res = await resolveLead(supabase, String(args.lead_ref))
+        if (!res.lead) return { result: J({ error: res.error, candidates: res.candidates }) }
+        const current = new Set<string>(res.lead.tags ?? [])
+        if (Array.isArray(args.add)) for (const t of args.add) { const s = String(t).trim(); if (s) current.add(s) }
+        if (Array.isArray(args.remove)) for (const t of args.remove) current.delete(String(t).trim())
+        const tags = Array.from(current)
+        const { error } = await supabase.from('leads').update({ tags }).eq('id', res.lead.id)
+        if (error) return { result: J({ error: error.message }) }
+        await logActivity(supabase, res.lead.id, userId, 'ai_action', `AI updated tags: ${tags.join(', ') || '(none)'}`)
+        return { result: J({ ok: true, tags }), action: { tool: 'set_lead_tags', summary: `Tags on ${res.lead.name}: ${tags.join(', ') || '(none)'}`, ok: true, lead_id: res.lead.id } }
+      }
+
+      case 'dismiss_draft': {
+        const res = await resolveLead(supabase, String(args.lead_ref))
+        if (!res.lead) return { result: J({ error: res.error, candidates: res.candidates }) }
+        let dq = supabase.from('email_drafts').select('id').eq('lead_id', res.lead.id).eq('status', 'pending')
+        if (args.subject_match) dq = dq.ilike('subject', `%${args.subject_match}%`)
+        const { data } = await dq.limit(10)
+        if (!data || data.length === 0) return { result: J({ error: 'No pending drafts for this lead' }) }
+        const { error } = await supabase.from('email_drafts').update({ status: 'dismissed', dismissed_at: new Date().toISOString(), dismissed_by: userId }).in('id', data.map(d => d.id))
+        if (error) return { result: J({ error: error.message }) }
+        return { result: J({ ok: true, dismissed: data.length }), action: { tool: 'dismiss_draft', summary: `Dismissed ${data.length} draft(s) for ${res.lead.name}`, ok: true, lead_id: res.lead.id } }
+      }
+
+      case 'delete_lead': {
+        if (args.confirmed !== true) return { result: J({ error: 'Not confirmed. Ask the user to confirm permanent deletion, then call again with confirmed: true.' }) }
+        const res = await resolveLead(supabase, String(args.lead_ref))
+        if (!res.lead) return { result: J({ error: res.error, candidates: res.candidates }) }
+        const delId = res.lead.id, delName = res.lead.name
+        await supabase.from('todos').update({ linked_lead_id: null, linked_draft_id: null }).eq('linked_lead_id', delId)
+        for (const tbl of ['lead_activities', 'lead_notes', 'lead_addresses', 'email_drafts', 'sms_messages', 'ai_memories']) {
+          await supabase.from(tbl).delete().eq('lead_id', delId)
+        }
+        const { error } = await supabase.from('leads').delete().eq('id', delId)
+        if (error) return { result: J({ error: error.message }) }
+        return { result: J({ ok: true, deleted: delName }), action: { tool: 'delete_lead', summary: `Deleted lead: ${delName}`, ok: true } }
       }
 
       default:

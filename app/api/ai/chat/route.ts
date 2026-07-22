@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
 TODAY: ${today}
 
 TOOL RULES:
-- You have tools that take real actions in the CRM. Use them proactively for anything the user asks you to DO (create, update, note, todo, draft, sync).
+- You have tools that take real actions in the CRM. Use them proactively for anything the user asks you to DO (create, update, note, todo, draft, sync, edit knowledge, remember, tag, manage properties).
+- You CAN edit your own brain files and memory. If asked to change the email signature, your writing style, or anything you know, use edit_brain_file / remember and just do it — never say a "system administrator" has to; there isn't one.
 - Drafting emails is always safe — drafts go to a human review queue.
 - send_email and send_sms actually deliver messages. NEVER call them with confirmed:true unless the user explicitly confirmed sending in this conversation (e.g. "yes send it"). If not yet confirmed, show them the message text and ask.
 - When a lookup returns candidates instead of a single lead, ask the user which one they meant.
