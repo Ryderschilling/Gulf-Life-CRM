@@ -61,8 +61,10 @@ export async function POST(req: NextRequest) {
   }
 
   const type = evt.type
+  // Quo delivers the message text as `text` (their REST field name); some
+  // OpenPhone-era docs show `body`. Accept both so we never store empties.
   const obj = (evt.data?.object ?? {}) as {
-    id?: string; from?: string; to?: string; body?: string
+    id?: string; from?: string; to?: string; body?: string; text?: string
     direction?: string; media?: { url: string; type: string }[]
   }
 
@@ -72,8 +74,14 @@ export async function POST(req: NextRequest) {
     // ── Inbound text ─────────────────────────────────────────
     if (type === 'message.received' && obj.direction === 'incoming') {
       const from = String(obj.from ?? '')
-      const text = String(obj.body ?? '')
+      const text = String(obj.text ?? obj.body ?? '')
       if (!from) return NextResponse.json({ ok: true })
+
+      // Dedupe — Quo retries deliveries; never store the same message twice
+      if (obj.id) {
+        const { data: dup } = await supabase.from('sms_messages').select('id').eq('provider_id', obj.id).limit(1)
+        if (dup && dup.length > 0) return NextResponse.json({ ok: true })
+      }
 
       const key = last10(from)
       let leadId: string | null = null

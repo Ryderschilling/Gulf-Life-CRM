@@ -5,13 +5,22 @@
 // leaving the CRM. Inbound messages are captured by the Quo / Resend
 // webhooks; this view merges them per lead into a two-way thread.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { MessageSquare, Mail, Send, Search, Inbox as InboxIcon, ExternalLink } from 'lucide-react'
 import { Card, Button, Input, Textarea, PageHeader, Avatar, EmptyState, Segmented, Pill } from '@/components/ui/kit'
 import { cn, timeAgo, formatPhone } from '@/lib/utils'
+
+// Channel colors — texts are indigo (brand accent), emails are teal.
+// One glance at any bubble, thread, or list row tells you which is which.
+const EMAIL = {
+  solid: 'bg-[#0d9488] text-white',        // outbound bubble
+  border: 'border-[#99f6e4]',              // inbound bubble edge
+  soft: 'bg-[#f0fdfa] text-[#0d9488]',     // chips / badges
+  text: 'text-[#0d9488]',
+}
 
 interface LeadLite { id: string; name: string; phone: string | null; email: string | null }
 interface SmsRow { id: string; lead_id: string; body: string; direction: string; status: string; created_at: string; lead: LeadLite | null }
@@ -21,12 +30,23 @@ interface Item { key: string; kind: 'sms' | 'email'; dir: 'in' | 'out'; text: st
 interface Convo { leadId: string; name: string; phone: string | null; email: string | null; items: Item[]; last: Item; needsReply: boolean }
 
 type Filter = 'all' | 'unresponded'
+type Channel = 'all' | 'sms' | 'email'
 
 export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: EmailRow[] }) {
   const router = useRouter()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [channel, setChannel] = useState<Channel>('all')
   const [search, setSearch] = useState('')
+
+  // Live refresh — new inbound texts/emails appear without a manual reload.
+  // router.refresh() refetches the server component; typed drafts survive.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') router.refresh()
+    }, 10_000)
+    return () => clearInterval(t)
+  }, [router])
 
   const convos = useMemo(() => {
     const map = new Map<string, Convo>()
@@ -62,19 +82,36 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
   const filtered = useMemo(() => {
     let list = convos
     if (filter === 'unresponded') list = list.filter(c => c.needsReply)
+    if (channel !== 'all') list = list.filter(c => c.items.some(i => i.kind === channel))
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(c => c.name.toLowerCase().includes(q) || (c.email ?? '').toLowerCase().includes(q) || (c.phone ?? '').includes(q))
     }
     return list
-  }, [convos, filter, search])
+  }, [convos, filter, channel, search])
 
   const active = convos.find(c => c.leadId === activeId) ?? filtered[0] ?? null
   const unresponded = convos.filter(c => c.needsReply).length
+  const smsCount = convos.filter(c => c.items.some(i => i.kind === 'sms')).length
+  const emailCount = convos.filter(c => c.items.some(i => i.kind === 'email')).length
 
   return (
     <div>
-      <PageHeader title="Inbox" subtitle="Every text and email, in one place" />
+      <PageHeader
+        title="Inbox"
+        subtitle="Every text and email, in one place"
+        right={convos.length > 0 ? (
+          <Segmented<Channel>
+            value={channel}
+            onChange={setChannel}
+            options={[
+              { value: 'all', label: 'All', count: convos.length },
+              { value: 'sms', label: 'Texts', count: smsCount },
+              { value: 'email', label: 'Emails', count: emailCount },
+            ]}
+          />
+        ) : undefined}
+      />
 
       {convos.length === 0 ? (
         <Card>
@@ -118,7 +155,11 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
                         <span className="text-[11px] text-ink-3 shrink-0">{timeAgo(c.last.at)}</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        {c.last.kind === 'sms' ? <MessageSquare size={12} className="text-ink-3 shrink-0" /> : <Mail size={12} className="text-ink-3 shrink-0" />}
+                        {c.last.kind === 'sms' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-px rounded text-[9.5px] font-bold uppercase tracking-wide bg-accent-soft text-accent shrink-0"><MessageSquare size={9} /> Text</span>
+                        ) : (
+                          <span className={cn('inline-flex items-center gap-1 px-1.5 py-px rounded text-[9.5px] font-bold uppercase tracking-wide shrink-0', EMAIL.soft)}><Mail size={9} /> Email</span>
+                        )}
                         <p className="text-[12px] text-ink-3 m-0 truncate">
                           {c.last.dir === 'out' ? 'You: ' : ''}{c.last.text.replace(/\s+/g, ' ').slice(0, 46)}
                         </p>
@@ -201,14 +242,21 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
         {convo.items.map(m => (
           <div key={m.key} className={cn('flex flex-col max-w-[76%]', m.dir === 'out' ? 'self-end items-end' : 'self-start items-start')}>
             {m.kind === 'email' && m.subject && (
-              <span className="text-[11px] font-semibold text-ink-3 mb-1 flex items-center gap-1"><Mail size={11} /> {m.subject}</span>
+              <span className={cn('text-[11px] font-semibold mb-1 flex items-center gap-1', EMAIL.text)}><Mail size={11} /> {m.subject}</span>
             )}
-            <div className={cn('rounded-2xl px-3.5 py-2.5 text-[13.5px] whitespace-pre-wrap break-words', m.dir === 'out' ? 'bg-accent text-white rounded-br-sm' : 'bg-white border border-line text-ink rounded-bl-sm')}>
+            <div className={cn('rounded-2xl px-3.5 py-2.5 text-[13.5px] whitespace-pre-wrap break-words',
+              m.dir === 'out'
+                ? cn(m.kind === 'sms' ? 'bg-accent' : EMAIL.solid, 'text-white rounded-br-sm')
+                : cn('bg-white border text-ink rounded-bl-sm', m.kind === 'sms' ? 'border-[#c7d2fe]' : EMAIL.border))}>
               {m.text}
             </div>
-            <span className="text-[10.5px] text-ink-3 mt-1 flex items-center gap-1">
-              {m.kind === 'sms' ? <MessageSquare size={10} /> : <Mail size={10} />}
-              {timeAgo(m.at)}{m.status === 'failed' ? ' · failed' : ''}
+            <span className="text-[10.5px] mt-1 flex items-center gap-1">
+              {m.kind === 'sms' ? (
+                <span className="inline-flex items-center gap-1 font-bold uppercase tracking-wide text-accent"><MessageSquare size={10} /> Text</span>
+              ) : (
+                <span className={cn('inline-flex items-center gap-1 font-bold uppercase tracking-wide', EMAIL.text)}><Mail size={10} /> Email</span>
+              )}
+              <span className="text-ink-3">· {timeAgo(m.at)}{m.status === 'failed' ? ' · failed' : ''}</span>
             </span>
           </div>
         ))}
@@ -218,10 +266,10 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
       <div className="border-t border-line px-4 py-3">
         <div className="flex items-center gap-2 mb-2">
           {convo.phone && (
-            <ChannelBtn active={channel === 'sms'} onClick={() => setChannel('sms')} icon={<MessageSquare size={13} />} label="Text" />
+            <ChannelBtn tone="sms" active={channel === 'sms'} onClick={() => setChannel('sms')} icon={<MessageSquare size={13} />} label="Text" />
           )}
           {convo.email && (
-            <ChannelBtn active={channel === 'email'} onClick={() => setChannel('email')} icon={<Mail size={13} />} label="Email" />
+            <ChannelBtn tone="email" active={channel === 'email'} onClick={() => setChannel('email')} icon={<Mail size={13} />} label="Email" />
           )}
           {!convo.phone && !convo.email && <Pill tone="gray">No phone or email on file</Pill>}
         </div>
@@ -247,12 +295,14 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
   )
 }
 
-function ChannelBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function ChannelBtn({ tone, active, onClick, icon, label }: { tone: 'sms' | 'email'; active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button
       onClick={onClick}
       className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12.5px] font-semibold border transition-colors',
-        active ? 'bg-accent-soft text-accent border-accent/30' : 'bg-card text-ink-2 border-line hover:text-ink')}
+        active
+          ? tone === 'sms' ? 'bg-accent-soft text-accent border-accent/30' : cn(EMAIL.soft, 'border-[#0d9488]/30')
+          : 'bg-card text-ink-2 border-line hover:text-ink')}
     >
       {icon} {label}
     </button>
