@@ -11,7 +11,7 @@ import type { AIActionResult, Lead } from './types'
 import { sendQuoSms, quoConfigured } from './quo'
 import { syncLeadToMailchimp, mailchimpConfigured } from './mailchimp'
 import { toE164 } from './utils'
-import { getResend, RESEND_FROM } from './resend'
+import { getResend, RESEND_FROM, REPLY_TO } from './resend'
 
 // ── Tool specs (OpenAI function-calling format) ─────────────
 export const AI_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -605,6 +605,7 @@ export async function executeAITool(
           to: res.lead.email,
           subject: String(args.subject),
           text: String(args.body),
+          ...(REPLY_TO ? { replyTo: REPLY_TO } : {}),
         })
         if (sendErr) return { result: J({ error: `Email failed: ${sendErr.message}` }), action: { tool: 'send_email', summary: `Email to ${res.lead.name} FAILED`, ok: false, lead_id: res.lead.id } }
         await supabase.from('email_drafts').insert({
