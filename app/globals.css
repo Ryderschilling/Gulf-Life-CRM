@@ -1,0 +1,86 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg:          #f6f7fb;
+  --card:        #ffffff;
+  --border:      #eceef3;
+  --border-2:    #e2e5ec;
+  --text:        #111322;
+  --text-2:      #667085;
+  --text-3:      #98a2b3;
+  --accent:      #6366f1;
+  --accent-dark: #4f52e0;
+  --accent-soft: #eef0fe;
+  --green:       #12b76a;
+  --green-soft:  #e7f7ef;
+  --yellow:      #f79009;
+  --yellow-soft: #fef2e2;
+  --red:         #f04438;
+  --red-soft:    #fdebea;
+  --blue:        #2e90fa;
+  --blue-soft:   #e8f2fe;
+  --violet:      #875bf7;
+  --violet-soft: #f1ebfe;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 2px 6px rgba(16, 24, 40, 0.04);
+  --shadow-pop:  0 12px 32px rgba(16, 24, 40, 0.14);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 15px;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d6dae2; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b6bcc9; }
+
+input, select, textarea, button { font-family: inherit; }
+
+input::placeholder, textarea::placeholder { color: var(--text-3); }
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.22s ease both; }
+
+@keyframes slide-in-right {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+.slide-in-right { animation: slide-in-right 0.22s ease both; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
+
+/* Typing dots for AI */
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40%           { transform: translateY(-4px); opacity: 1; }
+}
+.typing-dot { animation: typing-bounce 1.2s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
