@@ -152,35 +152,105 @@ export interface MailchimpCampaignSummary {
   subject: string
   status: string
   sendTime: string | null
+  createTime: string | null
   emailsSent: number
   openRate: number
   clickRate: number
+  uniqueOpens: number
+  subscriberClicks: number
   archiveUrl: string | null
 }
 
-/** Recent campaigns for this audience, newest first, with basic stats. */
+/** Every campaign for this audience, newest first, with headline stats. */
 export async function listMailchimpCampaigns(): Promise<{ ok: boolean; campaigns?: MailchimpCampaignSummary[]; error?: string }> {
   if (!mailchimpConfigured()) return { ok: false, error: 'Not configured' }
   try {
-    const r = await mc(`/campaigns?list_id=${process.env.MAILCHIMP_AUDIENCE_ID}&count=12&sort_field=create_time&sort_dir=DESC&fields=campaigns.id,campaigns.status,campaigns.send_time,campaigns.emails_sent,campaigns.archive_url,campaigns.settings.subject_line,campaigns.report_summary.open_rate,campaigns.report_summary.click_rate`)
+    const r = await mc(`/campaigns?list_id=${process.env.MAILCHIMP_AUDIENCE_ID}&count=200&sort_field=create_time&sort_dir=DESC&fields=campaigns.id,campaigns.status,campaigns.send_time,campaigns.create_time,campaigns.emails_sent,campaigns.archive_url,campaigns.settings.subject_line,campaigns.settings.title,campaigns.report_summary.open_rate,campaigns.report_summary.click_rate,campaigns.report_summary.unique_opens,campaigns.report_summary.subscriber_clicks`)
     if (!r.ok) return { ok: false, error: mcError(r.data, `Mailchimp ${r.status}`) }
     const d = r.data as { campaigns?: {
-      id: string; status: string; send_time?: string; emails_sent?: number; archive_url?: string
-      settings?: { subject_line?: string }
-      report_summary?: { open_rate?: number; click_rate?: number }
+      id: string; status: string; send_time?: string; create_time?: string; emails_sent?: number; archive_url?: string
+      settings?: { subject_line?: string; title?: string }
+      report_summary?: { open_rate?: number; click_rate?: number; unique_opens?: number; subscriber_clicks?: number }
     }[] }
     return {
       ok: true,
       campaigns: (d.campaigns ?? []).map(c => ({
         id: c.id,
-        subject: c.settings?.subject_line ?? '(no subject)',
+        subject: c.settings?.subject_line || c.settings?.title || '(no subject)',
         status: c.status,
         sendTime: c.send_time || null,
+        createTime: c.create_time || null,
         emailsSent: c.emails_sent ?? 0,
         openRate: c.report_summary?.open_rate ?? 0,
         clickRate: c.report_summary?.click_rate ?? 0,
+        uniqueOpens: c.report_summary?.unique_opens ?? 0,
+        subscriberClicks: c.report_summary?.subscriber_clicks ?? 0,
         archiveUrl: c.archive_url ?? null,
       })),
+    }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'request failed' }
+  }
+}
+
+export interface MailchimpCampaignReport {
+  subject: string
+  sendTime: string | null
+  emailsSent: number
+  opens: { total: number; unique: number; rate: number; last: string | null }
+  clicks: { total: number; unique: number; rate: number; last: string | null }
+  bounces: number
+  unsubscribed: number
+  abuseReports: number
+  clickedLinks: { url: string; totalClicks: number; uniqueClicks: number; clickRate: number }[]
+}
+
+/** Full report for one sent campaign — headline numbers + which links got clicked. */
+export async function getMailchimpCampaignReport(campaignId: string): Promise<{ ok: boolean; report?: MailchimpCampaignReport; error?: string }> {
+  if (!mailchimpConfigured()) return { ok: false, error: 'Not configured' }
+  try {
+    const [rep, clicks] = await Promise.all([
+      mc(`/reports/${campaignId}`),
+      mc(`/reports/${campaignId}/click-details?count=20&sort_field=total_clicks&sort_dir=DESC`),
+    ])
+    if (!rep.ok) return { ok: false, error: mcError(rep.data, 'No stats yet — this campaign has not been sent') }
+    const d = rep.data as {
+      subject_line?: string; send_time?: string; emails_sent?: number
+      opens?: { opens_total?: number; unique_opens?: number; open_rate?: number; last_open?: string }
+      clicks?: { clicks_total?: number; unique_clicks?: number; click_rate?: number; last_click?: string }
+      bounces?: { hard_bounces?: number; soft_bounces?: number; syntax_errors?: number }
+      unsubscribed?: number
+      abuse_reports?: number
+    }
+    const cd = (clicks.ok ? clicks.data : null) as { urls_clicked?: { url: string; total_clicks?: number; unique_clicks?: number; click_percentage?: number }[] } | null
+    return {
+      ok: true,
+      report: {
+        subject: d.subject_line ?? '',
+        sendTime: d.send_time || null,
+        emailsSent: d.emails_sent ?? 0,
+        opens: {
+          total: d.opens?.opens_total ?? 0,
+          unique: d.opens?.unique_opens ?? 0,
+          rate: d.opens?.open_rate ?? 0,
+          last: d.opens?.last_open || null,
+        },
+        clicks: {
+          total: d.clicks?.clicks_total ?? 0,
+          unique: d.clicks?.unique_clicks ?? 0,
+          rate: d.clicks?.click_rate ?? 0,
+          last: d.clicks?.last_click || null,
+        },
+        bounces: (d.bounces?.hard_bounces ?? 0) + (d.bounces?.soft_bounces ?? 0) + (d.bounces?.syntax_errors ?? 0),
+        unsubscribed: d.unsubscribed ?? 0,
+        abuseReports: d.abuse_reports ?? 0,
+        clickedLinks: (cd?.urls_clicked ?? []).map(u => ({
+          url: u.url,
+          totalClicks: u.total_clicks ?? 0,
+          uniqueClicks: u.unique_clicks ?? 0,
+          clickRate: u.click_percentage ?? 0,
+        })),
+      },
     }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'request failed' }
