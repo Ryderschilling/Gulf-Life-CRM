@@ -9,8 +9,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { MessageSquare, Mail, Send, Search, Inbox as InboxIcon, ExternalLink } from 'lucide-react'
-import { Card, Button, Input, Textarea, PageHeader, Avatar, EmptyState, Segmented, Pill } from '@/components/ui/kit'
+import { MessageSquare, Mail, Send, Search, Inbox as InboxIcon, ExternalLink, Sparkles } from 'lucide-react'
+import { Card, Button, Input, Textarea, PageHeader, Avatar, EmptyState, Segmented, Pill, Spinner } from '@/components/ui/kit'
 import { cn, timeAgo, formatPhone } from '@/lib/utils'
 
 // Channel colors — texts are indigo (brand accent), emails are teal.
@@ -232,6 +232,30 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
   const lastSubject = [...convo.items].reverse().find(i => i.kind === 'email' && i.subject)?.subject
   const [subject, setSubject] = useState(lastSubject ? (lastSubject.startsWith('Re:') ? lastSubject : `Re: ${lastSubject}`) : '')
   const [sending, setSending] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+
+  // "AI draft" — the server reads the whole conversation + everything on
+  // the lead + the company brain, then drops a draft here to edit & send.
+  async function aiDraft() {
+    if (drafting) return
+    setDrafting(true)
+    try {
+      const res = await fetch('/api/inbox/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_id: convo.leadId, channel }),
+      })
+      const d = await res.json()
+      if (d.error) throw new Error(d.error)
+      setText(d.body)
+      if (channel === 'email' && d.subject && !subject.trim()) setSubject(d.subject)
+      toast.success('Draft ready — edit and send')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Draft failed')
+    } finally {
+      setDrafting(false)
+    }
+  }
 
   async function send() {
     if (!text.trim() || sending) return
@@ -311,6 +335,16 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
             <ChannelBtn tone="email" active={channel === 'email'} onClick={() => setChannel('email')} icon={<Mail size={13} />} label="Email" />
           )}
           {!convo.phone && !convo.email && <Pill tone="gray">No phone or email on file</Pill>}
+          {(convo.phone || convo.email) && (
+            <button
+              onClick={aiDraft}
+              disabled={drafting || sending}
+              className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12.5px] font-semibold border border-accent/30 bg-accent-soft text-accent transition-colors hover:bg-accent hover:text-white disabled:opacity-60 disabled:hover:bg-accent-soft disabled:hover:text-accent"
+              title="AI reads the whole conversation and this lead's profile, then drafts a reply for you to edit"
+            >
+              {drafting ? <Spinner size={13} /> : <Sparkles size={13} />} {drafting ? 'Drafting…' : 'AI draft'}
+            </button>
+          )}
         </div>
         {channel === 'email' && convo.email && (
           <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject" className="mb-2" />
