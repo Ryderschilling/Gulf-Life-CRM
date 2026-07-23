@@ -10,7 +10,7 @@ import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
 import type { Lead, LeadStatus } from '@/lib/types'
 import { LEAD_STATUS_LABELS } from '@/lib/types'
-import { STATUS_CONFIG, ORDERED_STATUSES, timeAgo, followUpState, cn } from '@/lib/utils'
+import { STATUS_CONFIG, ORDERED_STATUSES, timeAgo, followUpState, leadDisplayName, cn } from '@/lib/utils'
 import { PageHeader, Button, Avatar, Pill } from '@/components/ui/kit'
 import NewLeadModal from '@/components/leads/NewLeadModal'
 
@@ -90,7 +90,7 @@ export default function PipelineBoard({ initialLeads }: { initialLeads: Lead[] }
             onDrop={e => handleDrop(e, status)}
             className={cn(
               'w-[248px] min-w-[248px] shrink-0 rounded-card border transition-colors p-3',
-              dragOverCol === status ? 'border-accent bg-accent-soft/50' : 'border-line bg-[#f1f2f7]'
+              dragOverCol === status ? 'border-accent bg-accent-soft/50' : 'border-line bg-[#efeade]'
             )}
           >
             {/* Column header */}
@@ -124,7 +124,7 @@ export default function PipelineBoard({ initialLeads }: { initialLeads: Lead[] }
                   >
                     <div className="flex items-center gap-2.5 mb-2">
                       <Avatar name={lead.name} size={28} />
-                      <p className="m-0 text-[13.5px] font-semibold text-ink truncate flex-1">{lead.name}</p>
+                      <p className="m-0 text-[13.5px] font-semibold text-ink truncate flex-1">{leadDisplayName(lead.name)}</p>
                     </div>
                     {lead.property_interest && (
                       <p className="m-0 text-[12px] text-ink-2 truncate mb-1.5">{lead.property_interest}</p>

@@ -35,11 +35,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#f6f7fb' }}>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#f7f5f0' }}>
       <div className="w-full max-w-[400px]">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-accent flex items-center justify-center text-white mb-4 shadow-pop">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white mb-4 shadow-pop" style={{ background: 'linear-gradient(135deg, #c9a96e 0%, #AB9055 55%, #907240 130%)' }}>
             <Waves size={26} />
           </div>
           <h1 className="text-[22px] font-bold text-ink m-0 tracking-tight">Gulf Life CRM</h1>
@@ -83,7 +83,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-accent hover:bg-accent-dark text-white font-semibold text-[14.5px] rounded-btn py-2.5 transition-colors disabled:opacity-50 mt-1"
+              className="w-full bg-navy hover:bg-navy-dark text-white font-semibold text-[14.5px] rounded-btn py-2.5 transition-colors disabled:opacity-50 mt-1"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>

@@ -34,7 +34,7 @@ interface Data {
   error?: string
 }
 
-const TEAL = '#0d9488'
+const TEAL = '#2B354E'
 
 const STATUS: Record<string, { label: string; tone: PillTone }> = {
   sent: { label: 'Sent', tone: 'green' },
@@ -252,7 +252,7 @@ export default function CampaignsClient({ userEmail }: { userEmail: string }) {
                     <tr
                       key={c.id}
                       onClick={() => openDetail(c)}
-                      className="border-b border-line last:border-b-0 cursor-pointer transition-colors hover:bg-[#f7f8fb]"
+                      className="border-b border-line last:border-b-0 cursor-pointer transition-colors hover:bg-[#f7f4ed]"
                     >
                       <Td className="pl-5">
                         <span className="font-semibold text-ink text-[13px]">{c.subject}</span>

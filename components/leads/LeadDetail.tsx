@@ -15,7 +15,8 @@ import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
 import type { Lead, LeadActivity, LeadAddress, LeadNote, LeadStatus, SmsMessage, EmailDraft } from '@/lib/types'
 import { LEAD_STATUS_LABELS } from '@/lib/types'
-import { STATUS_CONFIG, ORDERED_STATUSES, formatPhone, formatDate, formatDateTime, timeAgo, sourceLabel, cn } from '@/lib/utils'
+import { STATUS_CONFIG, ORDERED_STATUSES, formatPhone, formatDate, formatDateTime, timeAgo, sourceLabel, leadDisplayName, isPhoneName, cn } from '@/lib/utils'
+import { localTimeToISO } from '@/lib/dates'
 import { Card, CardHeader, Button, Pill, Avatar, Field, Input, Textarea, Modal, Select } from '@/components/ui/kit'
 
 interface Props {
@@ -146,7 +147,8 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
   }
 
   async function saveFollowUp() {
-    const value = followUpDate ? new Date(followUpDate + 'T09:00:00').toISOString() : null
+    // Store as 9am CRM-local on the chosen calendar day (lib/dates.ts)
+    const value = followUpDate ? localTimeToISO(followUpDate) : null
     const { error } = await supabase.from('leads').update({ next_follow_up_at: value }).eq('id', lead.id)
     if (error) { toast.error('Failed to save'); return }
     toast.success(value ? 'Follow-up scheduled' : 'Follow-up cleared')
@@ -155,7 +157,19 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
   }
 
   // ── Timeline (activities + sms merged) ─────────────────────
-  const timeline = [...activities].sort((a, b) => b.created_at.localeCompare(a.created_at))
+  // The "Lead created" event always mirrors the Details card's "Added" date —
+  // both derive from leads.created_at. (Seeded/backdated rows would otherwise
+  // show the seeding time; leads without a stored 'created' activity, like
+  // inbound-SMS auto-leads, get one synthesized.)
+  const createdActivity = activities.find(a => a.type === 'created')
+  const createdEvent: LeadActivity = createdActivity
+    ? { ...createdActivity, created_at: lead.created_at }
+    : { id: `created-${lead.id}`, lead_id: lead.id, user_id: null, type: 'created', body: 'Lead created', metadata: null, created_at: lead.created_at }
+  const timeline = [...activities.filter(a => a.type !== 'created'), createdEvent]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+
+  const displayName = leadDisplayName(lead.name)
+  const firstName = isPhoneName(lead.name) ? displayName : lead.name.split(' ')[0]
 
   const extraEntries = Object.entries(lead.extra ?? {}).filter(([, v]) => v)
 
@@ -173,8 +187,9 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
             <Avatar name={lead.name} size={52} />
             <div className="min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-[20px] font-bold text-ink m-0 tracking-tight">{lead.name}</h1>
+                <h1 className="text-[20px] font-bold text-ink m-0 tracking-tight">{displayName}</h1>
                 {lead.mailchimp_status === 'synced' && <Pill tone="yellow">Mailchimp ✓</Pill>}
+                {lead.mailchimp_status === 'failed' && <Pill tone="red">Mailchimp sync failed</Pill>}
               </div>
               <p className="text-[13px] text-ink-2 m-0 mt-1">
                 {lead.email ?? 'No email'} · {formatPhone(lead.phone)} · {sourceLabel(lead.source)}
@@ -246,7 +261,7 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
                 <Textarea
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
-                  placeholder={`Add a note about ${lead.name.split(' ')[0]}…`}
+                  placeholder={`Add a note about ${firstName}…`}
                   rows={2}
                   className="min-h-[56px]"
                 />
@@ -338,7 +353,7 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
               <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0 mb-3">Recent texts</p>
               <div className="flex flex-col gap-2">
                 {smsMessages.slice(0, 5).map(s => (
-                  <div key={s.id} className="bg-[#f7f8fb] rounded-lg px-3 py-2">
+                  <div key={s.id} className="bg-[#f7f4ed] rounded-lg px-3 py-2">
                     <p className="text-[12.5px] text-ink m-0">{s.body}</p>
                     <p className="text-[11px] text-ink-3 m-0 mt-0.5">
                       {s.status === 'failed' ? '⚠ Failed · ' : ''}{timeAgo(s.created_at)}
@@ -352,7 +367,7 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
       </div>
 
       {/* SMS modal */}
-      <Modal open={smsOpen} onClose={() => setSmsOpen(false)} title={`Text ${lead.name.split(' ')[0]}`}>
+      <Modal open={smsOpen} onClose={() => setSmsOpen(false)} title={`Text ${firstName}`}>
         <div className="flex flex-col gap-3">
           <p className="text-[12.5px] text-ink-2 m-0">To {formatPhone(lead.phone)} via your Quo number</p>
           <Textarea

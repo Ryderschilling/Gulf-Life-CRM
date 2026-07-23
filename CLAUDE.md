@@ -32,7 +32,7 @@ href:
 - **Mailchimp** — marketing audience sync (member upsert + tags by type/stage)
 - **papaparse** — client-side CSV parsing for the import wizard
 
-Design: light "WhiteUI"-style theme — `#f6f7fb` page, white cards (16px radius), indigo accent `#6366f1`, soft status pills. Tokens in `tailwind.config.ts` + `app/globals.css`. Shared primitives in `components/ui/kit.tsx`.
+Design: **Gulf Life brand theme (rebranded Jul 23, 2026 — matches the logo: gold key, navy wordmark)** — warm cream `#f7f5f0` page, white cards (16px radius), antique-gold accent `#a08447` (rich brand gold `#AB9055`/`#907240` in gradients), **navy `#2B354E` primary buttons + navy sidebar rail**, warm hairlines `#ebe6da`, navy ink `#1f2941`, soft status pills. Inbox: texts = gold, email = navy. The AI is branded **"Gulf AI"**: champagne-gold gradient identity with a custom "tide orb" SVG mark (`components/ai/AIMark.tsx` — also exports AIBadge/AIThinking) + `ai-*` motion system in `globals.css` (orb, gradient buttons/cards, entrances, shimmer; reduced-motion safe). Tokens in `tailwind.config.ts` + `app/globals.css`. Shared primitives in `components/ui/kit.tsx`.
 
 ## Pages
 

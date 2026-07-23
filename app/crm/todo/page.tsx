@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { todayStr, endOfTodayISO } from "@/lib/dates";
 import type { Todo, EmailDraft, Lead, DailyDigest } from "@/lib/types";
 import TodoPageClient from "@/components/todo/TodoPageClient";
 
@@ -8,9 +9,7 @@ export const metadata = { title: "To-Do — Gulf Life CRM" };
 export default async function TodoPage() {
   const supabase = await createClient();
 
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
-  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  // "Due" = follow-up date is today or earlier, by the CRM-local calendar (lib/dates.ts).
 
   const [{ data: todos }, { data: drafts }, { data: followUps }, { data: digest }] = await Promise.all([
     supabase
@@ -30,14 +29,14 @@ export default async function TodoPage() {
       .from("leads")
       .select("*")
       .eq("lead_type", "owner")
-      .lte("next_follow_up_at", endOfToday.toISOString())
+      .lte("next_follow_up_at", endOfTodayISO())
       .not("status", "in", '("closed_won","closed_lost")')
       .order("next_follow_up_at", { ascending: true })
       .limit(50),
     supabase
       .from("daily_digests")
       .select("*")
-      .eq("digest_date", todayStr)
+      .eq("digest_date", todayStr())
       .eq("digest_type", "sales_rep")
       .maybeSingle(),
   ]);

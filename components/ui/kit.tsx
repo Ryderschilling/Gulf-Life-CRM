@@ -6,7 +6,7 @@
 // ============================================================
 
 import { type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, forwardRef } from 'react'
-import { X } from 'lucide-react'
+import { X, Phone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ── Card ────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ const PILL_TONES: Record<PillTone, string> = {
   blue:   'bg-info-soft text-info',
   violet: 'bg-grape-soft text-grape',
   indigo: 'bg-accent-soft text-accent',
-  gray:   'bg-[#f2f4f7] text-ink-2',
+  gray:   'bg-[#f0ebe1] text-ink-2',
 }
 
 export function Pill({ tone = 'gray', children, className }: { tone?: PillTone; children: ReactNode; className?: string }) {
@@ -103,9 +103,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
   const base = 'inline-flex items-center justify-center gap-1.5 font-semibold rounded-btn transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap'
   const sizes = size === 'sm' ? 'text-[13px] px-3 py-1.5' : 'text-[14px] px-4 py-2'
   const variants: Record<BtnVariant, string> = {
-    primary: 'bg-accent text-white hover:bg-accent-dark',
-    secondary: 'bg-card text-ink border border-line-strong hover:bg-[#f7f8fb]',
-    ghost: 'bg-transparent text-ink-2 hover:bg-[#f2f4f7] hover:text-ink',
+    primary: 'bg-navy text-white hover:bg-navy-dark',
+    secondary: 'bg-card text-ink border border-line-strong hover:bg-[#f7f4ed]',
+    ghost: 'bg-transparent text-ink-2 hover:bg-[#f0ebe1] hover:text-ink',
     danger: 'bg-bad-soft text-bad hover:bg-[#fbd9d6]',
   }
   return (
@@ -172,7 +172,7 @@ export function Segmented<T extends string>({ options, value, onChange }: {
   onChange: (v: T) => void
 }) {
   return (
-    <div className="inline-flex items-center bg-[#f2f4f7] rounded-btn p-1 gap-0.5">
+    <div className="inline-flex items-center bg-[#f0ebe1] rounded-btn p-1 gap-0.5">
       {options.map(o => (
         <button
           key={o.value}
@@ -204,11 +204,11 @@ export function Modal({ open, onClose, title, children, wide }: {
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }} style={{ background: 'rgba(17,19,34,0.4)' }}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }} style={{ background: 'rgba(28,36,56,0.4)' }}>
       <div className={cn('bg-card rounded-card shadow-pop w-full max-h-[90vh] overflow-y-auto fade-up', wide ? 'max-w-3xl' : 'max-w-lg')}>
         <div className="flex items-center justify-between px-6 pt-5 pb-1 sticky top-0 bg-card z-10">
           <h3 className="text-[17px] font-semibold text-ink m-0">{title}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-3 hover:bg-[#f2f4f7] hover:text-ink transition-colors">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-3 hover:bg-[#f0ebe1] hover:text-ink transition-colors">
             <X size={17} />
           </button>
         </div>
@@ -229,7 +229,16 @@ const AVATAR_COLORS = [
 ]
 
 export function Avatar({ name, size = 34 }: { name: string; size?: number }) {
-  const initials = name.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
+  // Initials come from letters only — a phone-number "name" (SMS auto-created
+  // lead) has none, so it gets a phone icon instead of garbage like "(9".
+  const initials = name
+    .split(' ')
+    .map(w => w.replace(/[^a-zA-Z]/g, ''))
+    .filter(Boolean)
+    .map(w => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
   let hash = 0
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
   const color = AVATAR_COLORS[hash % AVATAR_COLORS.length]
@@ -238,7 +247,7 @@ export function Avatar({ name, size = 34 }: { name: string; size?: number }) {
       className={cn('rounded-full flex items-center justify-center font-bold shrink-0', color)}
       style={{ width: size, height: size, fontSize: size * 0.36 }}
     >
-      {initials}
+      {initials || <Phone size={Math.max(12, Math.round(size * 0.42))} />}
     </div>
   )
 }

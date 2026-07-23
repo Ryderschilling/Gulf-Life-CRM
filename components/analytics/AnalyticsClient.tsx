@@ -6,7 +6,7 @@
 import { useMemo } from 'react'
 import { TrendingUp, Target, Trophy, Users } from 'lucide-react'
 import type { Lead } from '@/lib/types'
-import { STATUS_CONFIG, ORDERED_STATUSES, sourceLabel } from '@/lib/utils'
+import { STATUS_CONFIG, ORDERED_STATUSES, isWonThisMonth, sourceLabel } from '@/lib/utils'
 import { Card, CardHeader, StatCard, PageHeader, EmptyState } from '@/components/ui/kit'
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
   activities: { type: string; created_at: string }[]
 }
 
-const CHART_COLORS = ['#6366f1', '#12b76a', '#f79009', '#2e90fa', '#875bf7', '#f04438', '#98a2b3']
+const CHART_COLORS = ['#a08447', '#2B354E', '#f79009', '#12b76a', '#7d5b8f', '#f04438', '#9aa1b0']
 
 export default function AnalyticsClient({ leads, activities }: Props) {
   // Server already scopes to homeowner (owner) leads.
@@ -26,8 +26,8 @@ export default function AnalyticsClient({ leads, activities }: Props) {
   const winRate = closed > 0 ? Math.round((won / closed) * 100) : null
   const active = owners.filter(l => !['closed_won', 'closed_lost'].includes(l.status)).length
 
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
-  const wonThisMonth = owners.filter(l => l.status === 'closed_won' && new Date(l.created_at) >= monthStart).length
+  // Shared helper (lib/utils.ts) — same calc as the Overview stat card, always in sync
+  const wonThisMonth = owners.filter(isWonThisMonth).length
 
   // ── Leads per week (8 weeks) ───────────────────────────────
   const weeklyData = useMemo(() => {
@@ -116,7 +116,7 @@ export default function AnalyticsClient({ leads, activities }: Props) {
         <Card>
           <CardHeader title="New leads per week" subtitle="Homeowner leads added, last 8 weeks" />
           <div className="px-6 pb-6">
-            <SimpleBars data={weeklyData} color="#6366f1" />
+            <SimpleBars data={weeklyData} color="#a08447" />
           </div>
         </Card>
 
@@ -127,7 +127,7 @@ export default function AnalyticsClient({ leads, activities }: Props) {
             {stageData.map(d => (
               <div key={d.status} className="flex items-center gap-3">
                 <span className="text-[12.5px] font-semibold text-ink-2 w-[76px] shrink-0">{d.label}</span>
-                <div className="flex-1 h-[26px] bg-[#f2f4f7] rounded-lg overflow-hidden">
+                <div className="flex-1 h-[26px] bg-[#f0ebe1] rounded-lg overflow-hidden">
                   <div
                     className="h-full rounded-lg transition-all flex items-center justify-end pr-2"
                     style={{ width: `${Math.max((d.count / maxStage) * 100, d.count > 0 ? 8 : 0)}%`, background: d.hex }}
@@ -167,7 +167,7 @@ export default function AnalyticsClient({ leads, activities }: Props) {
             {outreachData.every(d => d.count === 0) ? (
               <p className="text-[12.5px] text-ink-3 m-0 py-8 text-center">Send emails, texts, or log calls and this fills in</p>
             ) : (
-              <SimpleBars data={outreachData} color="#2e90fa" />
+              <SimpleBars data={outreachData} color="#2B354E" />
             )}
           </div>
         </Card>
@@ -193,9 +193,9 @@ function SimpleBars({ data, color }: { data: { label: string; count: number }[];
           <g key={i}>
             {h > 0 && <rect x={x + w / 2 - barW / 2} y={H - PAD_B - h} width={barW} height={h} rx={4} fill={color} />}
             {d.count > 0 && (
-              <text x={x + w / 2} y={H - PAD_B - h - 5} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#667085" fontFamily="Inter, sans-serif">{d.count}</text>
+              <text x={x + w / 2} y={H - PAD_B - h - 5} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#5d6577" fontFamily="Inter, sans-serif">{d.count}</text>
             )}
-            <text x={x + w / 2} y={H - 6} textAnchor="middle" fontSize={9.5} fill="#98a2b3" fontFamily="Inter, sans-serif">{d.label}</text>
+            <text x={x + w / 2} y={H - 6} textAnchor="middle" fontSize={9.5} fill="#9aa1b0" fontFamily="Inter, sans-serif">{d.label}</text>
           </g>
         )
       })}
@@ -209,7 +209,7 @@ function Donut({ data, total }: { data: { value: number; color: string }[]; tota
   let offset = 0
   return (
     <svg width={140} height={140} viewBox="0 0 140 140" className="shrink-0">
-      <circle cx={70} cy={70} r={R} fill="none" stroke="#f2f4f7" strokeWidth={STROKE} />
+      <circle cx={70} cy={70} r={R} fill="none" stroke="#f0ebe1" strokeWidth={STROKE} />
       {data.map((d, i) => {
         const frac = d.value / sum
         const dash = frac * C
@@ -229,8 +229,8 @@ function Donut({ data, total }: { data: { value: number; color: string }[]; tota
         offset += dash
         return el
       })}
-      <text x={70} y={66} textAnchor="middle" fontSize={22} fontWeight={800} fill="#111322" fontFamily="Inter, sans-serif">{total}</text>
-      <text x={70} y={84} textAnchor="middle" fontSize={10} fontWeight={600} fill="#98a2b3" fontFamily="Inter, sans-serif">leads</text>
+      <text x={70} y={66} textAnchor="middle" fontSize={22} fontWeight={800} fill="#1f2941" fontFamily="Inter, sans-serif">{total}</text>
+      <text x={70} y={84} textAnchor="middle" fontSize={10} fontWeight={600} fill="#9aa1b0" fontFamily="Inter, sans-serif">leads</text>
     </svg>
   )
 }

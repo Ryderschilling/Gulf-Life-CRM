@@ -113,12 +113,12 @@ export default function AIDrawer() {
                 {messages.length > 0 && (
                   <button
                     onClick={() => { setMessages([]); setConversationId(null) }}
-                    className="text-[12px] font-semibold text-ink-3 hover:text-ink px-2 py-1 rounded-md hover:bg-[#f5f6fa] transition-colors"
+                    className="text-[12px] font-semibold text-ink-3 hover:text-ink px-2 py-1 rounded-md hover:bg-[#f6f3ec] transition-colors"
                   >
                     New chat
                   </button>
                 )}
-                <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-3 hover:bg-[#f5f6fa] hover:text-ink transition-colors">
+                <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-3 hover:bg-[#f6f3ec] hover:text-ink transition-colors">
                   <X size={17} />
                 </button>
               </div>
@@ -139,7 +139,7 @@ export default function AIDrawer() {
                         key={s}
                         onClick={() => s.endsWith(': ') ? setInput(s) : send(s)}
                         style={{ animationDelay: `${120 + i * 70}ms` }}
-                        className="ai-rise ai-suggest text-left text-[13px] text-ink-2 bg-[#f7f8fb] border border-line rounded-xl px-3.5 py-2.5"
+                        className="ai-rise ai-suggest text-left text-[13px] text-ink-2 bg-[#f7f4ed] border border-line rounded-xl px-3.5 py-2.5"
                       >
                         {s}
                       </button>
@@ -166,7 +166,7 @@ export default function AIDrawer() {
                   }}
                   rows={1}
                   placeholder="Ask or instruct…"
-                  className="flex-1 bg-[#f7f8fb] border border-line-strong rounded-xl px-3.5 py-2.5 text-[14px] text-ink resize-none max-h-32"
+                  className="flex-1 bg-[#f7f4ed] border border-line-strong rounded-xl px-3.5 py-2.5 text-[14px] text-ink resize-none max-h-32"
                   style={{ minHeight: 42 }}
                 />
                 <button
@@ -183,6 +183,64 @@ export default function AIDrawer() {
       )}
     </>
   )
+}
+
+// ── Lightweight markdown for chat bubbles ───────────────────
+// The model replies with **bold** and lists; render them instead of showing
+// raw asterisks. No dependency, no HTML injection — everything stays JSX text.
+
+function MdInline({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith('**') && p.endsWith('**') && p.length > 4
+          ? <strong key={i}>{p.slice(2, -2)}</strong>
+          : <span key={i}>{p}</span>
+      )}
+    </>
+  )
+}
+
+function MdContent({ text }: { text: string }) {
+  const blocks: React.ReactNode[] = []
+  let list: { ordered: boolean; items: string[] } | null = null
+
+  const flushList = (key: number) => {
+    if (!list) return
+    const items = list.items.map((item, i) => <li key={i}><MdInline text={item} /></li>)
+    blocks.push(
+      list.ordered
+        ? <ol key={`l${key}`} className="m-0 mb-1.5 pl-5 list-decimal flex flex-col gap-0.5">{items}</ol>
+        : <ul key={`l${key}`} className="m-0 mb-1.5 pl-5 list-disc flex flex-col gap-0.5">{items}</ul>
+    )
+    list = null
+  }
+
+  text.split('\n').forEach((line, idx) => {
+    const bullet = line.match(/^\s*[-*•]\s+(.*)$/)
+    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/)
+    const heading = line.match(/^\s*#{1,4}\s+(.*)$/)
+    if (bullet) {
+      if (!list || list.ordered) { flushList(idx); list = { ordered: false, items: [] } }
+      list.items.push(bullet[1])
+    } else if (numbered) {
+      if (!list || !list.ordered) { flushList(idx); list = { ordered: true, items: [] } }
+      list.items.push(numbered[1])
+    } else {
+      flushList(idx)
+      const content = heading ? heading[1] : line
+      if (content.trim()) {
+        blocks.push(
+          <p key={idx} className={cn('m-0 mb-1.5 last:mb-0', heading && 'font-bold')}>
+            <MdInline text={content} />
+          </p>
+        )
+      }
+    }
+  })
+  flushList(-1)
+  return <>{blocks}</>
 }
 
 export function MessageBubble({ message }: { message: AIChatMessage }) {
@@ -203,13 +261,13 @@ export function MessageBubble({ message }: { message: AIChatMessage }) {
         )}
         <div
           className={cn(
-            'px-3.5 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap',
+            'px-3.5 py-2.5 text-[13.5px] leading-relaxed',
             isUser
-              ? 'ai-msg-user text-white rounded-2xl rounded-br-md'
-              : 'bg-[#f8f9fc] text-ink rounded-2xl rounded-tl-md border border-line'
+              ? 'ai-msg-user text-white rounded-2xl rounded-br-md whitespace-pre-wrap'
+              : 'bg-[#f8f5ef] text-ink rounded-2xl rounded-tl-md border border-line'
           )}
         >
-          {message.content}
+          {isUser ? message.content : <MdContent text={message.content} />}
         </div>
       </div>
     </div>

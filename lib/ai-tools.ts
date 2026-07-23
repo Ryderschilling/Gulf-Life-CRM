@@ -11,6 +11,7 @@ import type { AIActionResult, Lead } from './types'
 import { sendQuoSms, quoConfigured } from './quo'
 import { syncLeadToMailchimp, mailchimpConfigured } from './mailchimp'
 import { toE164 } from './utils'
+import { startOfTodayISO, followUpStatus, localTimeToISO } from './dates'
 import { sendEmail, mailerConfigured } from './mailer'
 
 // ── Tool specs (OpenAI function-calling format) ─────────────
@@ -408,7 +409,7 @@ export async function executeAITool(
       case 'search_leads': {
         let q = supabase.from('leads').select('*').eq('lead_type', 'owner')
         if (args.status) q = q.eq('status', args.status)
-        if (args.overdue_only) q = q.lt('next_follow_up_at', new Date().toISOString()).not('status', 'in', '("closed_won","closed_lost")')
+        if (args.overdue_only) q = q.lt('next_follow_up_at', startOfTodayISO()).not('status', 'in', '("closed_won","closed_lost")')
         if (args.query) {
           const s = String(args.query).replace(/[%,]/g, ' ').trim()
           q = q.or(`name.ilike.%${s}%,email.ilike.%${s}%,phone.ilike.%${s}%,last_property.ilike.%${s}%`)
@@ -473,8 +474,11 @@ export async function executeAITool(
           if (args[k] !== undefined) { updates[k] = args[k]; changed.push(`${k} → ${args[k]}`) }
         }
         if (args.next_follow_up_at) {
-          updates.next_follow_up_at = new Date(String(args.next_follow_up_at)).toISOString()
-          changed.push(`follow-up → ${args.next_follow_up_at}`)
+          // A bare YYYY-MM-DD means that CRM-local calendar day (9am), not UTC
+          // midnight — parsing it as UTC would land the follow-up a day early.
+          const raw = String(args.next_follow_up_at)
+          updates.next_follow_up_at = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? localTimeToISO(raw) : new Date(raw).toISOString()
+          changed.push(`follow-up → ${raw}`)
         }
         if (args.mark_contacted) { updates.last_contacted_at = new Date().toISOString(); changed.push('marked contacted') }
         if (Object.keys(updates).length === 0) return { result: J({ error: 'No updates provided' }) }
@@ -563,16 +567,19 @@ export async function executeAITool(
       case 'get_pipeline_stats': {
         const { data: leads } = await supabase.from('leads').select('lead_type, status, next_follow_up_at').eq('lead_type', 'owner').eq('relationship', 'prospect')
         const owners = (leads ?? []) as Pick<Lead, 'lead_type' | 'status' | 'next_follow_up_at'>[]
-        const now = new Date().toISOString()
         const byStage: Record<string, number> = {}
         for (const o of owners) byStage[o.status] = (byStage[o.status] ?? 0) + 1
         const activeOwners = owners.filter(l => !['closed_won', 'closed_lost'].includes(l.status)).length
+        // Same CRM-local calendar rule as the UI (lib/dates.ts):
+        // date < today = overdue, date = today = due today.
+        const open = owners.filter(l => !['closed_won', 'closed_lost'].includes(l.status))
         return {
           result: J({
             owner_leads_total: owners.length,
             owner_leads_active: activeOwners,
             by_stage: byStage,
-            follow_ups_overdue: owners.filter(l => l.next_follow_up_at && l.next_follow_up_at < now && !['closed_won', 'closed_lost'].includes(l.status)).length,
+            follow_ups_overdue: open.filter(l => followUpStatus(l.next_follow_up_at) === 'overdue').length,
+            follow_ups_due_today: open.filter(l => followUpStatus(l.next_follow_up_at) === 'today').length,
             conversion_rate: owners.length > 0 ? Math.round((byStage['closed_won'] ?? 0) / owners.length * 100) + '%' : 'n/a',
           }),
         }

@@ -132,7 +132,7 @@ export default function ImportWizard() {
             <div key={s} className="flex items-center gap-2">
               <div className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-full text-[12.5px] font-semibold',
-                active ? 'bg-accent text-white' : done ? 'bg-good-soft text-good' : 'bg-[#f2f4f7] text-ink-3'
+                active ? 'bg-accent text-white' : done ? 'bg-good-soft text-good' : 'bg-[#f0ebe1] text-ink-3'
               )}>
                 <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
                   {done ? '✓' : i + 1}
@@ -165,7 +165,7 @@ export default function ImportWizard() {
             onClick={() => fileInputRef.current?.click()}
             className={cn(
               'm-6 border-2 border-dashed rounded-card py-16 flex flex-col items-center justify-center cursor-pointer transition-colors',
-              dragOver ? 'border-accent bg-accent-soft/40' : 'border-line-strong hover:border-accent/50 hover:bg-[#fafbfe]'
+              dragOver ? 'border-accent bg-accent-soft/40' : 'border-line-strong hover:border-accent/50 hover:bg-[#faf8f2]'
             )}
           >
             <div className="w-14 h-14 rounded-2xl bg-accent-soft text-accent flex items-center justify-center mb-4">
@@ -251,7 +251,7 @@ export default function ImportWizard() {
                     const samples = rows.slice(0, 3).map(r => r[h]).filter(Boolean).slice(0, 2)
                     const availableFields = TARGET_FIELDS.filter(f => !f.guestOnly)
                     return (
-                      <tr key={h} className="hover:bg-[#fafbfe]">
+                      <tr key={h} className="hover:bg-[#faf8f2]">
                         <td className="px-6 py-3 border-b border-line text-[13.5px] font-semibold text-ink whitespace-nowrap">{h}</td>
                         <td className="px-4 py-3 border-b border-line text-[12.5px] text-ink-3 max-w-[280px] truncate">
                           {samples.join(' · ') || <span className="italic">empty</span>}
@@ -290,7 +290,7 @@ export default function ImportWizard() {
           <Spinner size={28} />
           <p className="text-[15px] font-semibold text-ink mt-4 mb-1">Importing…</p>
           <p className="text-[13px] text-ink-2 m-0">{progress}% — deduping against existing records</p>
-          <div className="w-64 h-2 bg-[#f2f4f7] rounded-full mt-4 overflow-hidden">
+          <div className="w-64 h-2 bg-[#f0ebe1] rounded-full mt-4 overflow-hidden">
             <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${progress}%` }} />
           </div>
         </Card>
@@ -335,7 +335,7 @@ function ReportStat({ label, value, tone }: { label: string; value: number; tone
   const tones = {
     good: 'bg-good-soft text-good',
     accent: 'bg-accent-soft text-accent',
-    gray: 'bg-[#f2f4f7] text-ink-2',
+    gray: 'bg-[#f0ebe1] text-ink-2',
     bad: 'bg-bad-soft text-bad',
   }
   return (

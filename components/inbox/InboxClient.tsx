@@ -5,7 +5,7 @@
 // leaving the CRM. Inbound messages are captured by the Quo / Resend
 // webhooks; this view merges them per lead into a two-way thread.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
@@ -13,15 +13,15 @@ import { MessageSquare, Mail, Send, Search, Inbox as InboxIcon, ExternalLink, Mo
 import { AIMark } from '@/components/ai/AIMark'
 import { Card, Button, Input, Textarea, PageHeader, Avatar, EmptyState, Segmented, Pill, Spinner, Modal } from '@/components/ui/kit'
 import { createClient } from '@/lib/supabase/client'
-import { cn, timeAgo, formatPhone } from '@/lib/utils'
+import { cn, timeAgo, formatPhone, leadDisplayName } from '@/lib/utils'
 
 // Channel colors — texts are indigo (brand accent), emails are teal.
 // One glance at any bubble, thread, or list row tells you which is which.
 const EMAIL = {
-  solid: 'bg-[#0d9488] text-white',        // outbound bubble
-  border: 'border-[#99f6e4]',              // inbound bubble edge
-  soft: 'bg-[#f0fdfa] text-[#0d9488]',     // chips / badges
-  text: 'text-[#0d9488]',
+  solid: 'bg-[#2B354E] text-white',        // outbound bubble
+  border: 'border-[#c4cddf]',              // inbound bubble edge
+  soft: 'bg-[#eef1f7] text-[#2B354E]',     // chips / badges
+  text: 'text-[#2B354E]',
 }
 
 interface LeadLite { id: string; name: string; phone: string | null; email: string | null; relationship?: 'prospect' | 'client' | null }
@@ -239,12 +239,12 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
                     tabIndex={0}
                     onClick={() => setActiveId(c.leadId)}
                     onKeyDown={e => { if (e.key === 'Enter') setActiveId(c.leadId) }}
-                    className={cn('group w-full text-left px-3.5 py-3 border-b border-line flex items-start gap-3 transition-colors cursor-pointer', isActive ? 'bg-accent-soft' : 'hover:bg-[#f7f8fb]')}
+                    className={cn('group w-full text-left px-3.5 py-3 border-b border-line flex items-start gap-3 transition-colors cursor-pointer', isActive ? 'bg-accent-soft' : 'hover:bg-[#f7f4ed]')}
                   >
                     <Avatar name={c.name} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className={cn('text-[13.5px] font-semibold m-0 truncate', isActive ? 'text-accent' : 'text-ink')}>{c.name}</p>
+                        <p className={cn('text-[13.5px] font-semibold m-0 truncate', isActive ? 'text-accent' : 'text-ink')}>{leadDisplayName(c.name)}</p>
                         <span className="text-[11px] text-ink-3 shrink-0">{timeAgo(c.last.at)}</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
@@ -264,8 +264,8 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
                         <button
                           onClick={() => setMenuFor(menuFor === c.leadId ? null : c.leadId)}
                           title="Conversation options"
-                          className={cn('w-6 h-6 rounded-md flex items-center justify-center text-ink-3 hover:bg-[#e9ebf2] hover:text-ink transition-all',
-                            menuFor === c.leadId ? 'opacity-100 bg-[#e9ebf2]' : 'opacity-0 group-hover:opacity-100 focus:opacity-100')}
+                          className={cn('w-6 h-6 rounded-md flex items-center justify-center text-ink-3 hover:bg-[#e6e0d2] hover:text-ink transition-all',
+                            menuFor === c.leadId ? 'opacity-100 bg-[#e6e0d2]' : 'opacity-0 group-hover:opacity-100 focus:opacity-100')}
                         >
                           <MoreHorizontal size={15} />
                         </button>
@@ -338,7 +338,7 @@ function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; lab
     <button
       onClick={onClick}
       className={cn('w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] font-medium text-left transition-colors',
-        danger ? 'text-bad hover:bg-[#fef2f2]' : 'text-ink-2 hover:bg-[#f5f6fa] hover:text-ink')}
+        danger ? 'text-bad hover:bg-[#fef2f2]' : 'text-ink-2 hover:bg-[#f6f3ec] hover:text-ink')}
     >
       {icon} {label}
     </button>
@@ -347,6 +347,12 @@ function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; lab
 
 function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
   const [channel, setChannel] = useState<'sms' | 'email'>(convo.phone ? 'sms' : 'email')
+  // Open pinned to the newest message, and stay pinned when a new one arrives.
+  const messagesRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = messagesRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [convo.leadId, convo.items.length])
   const [text, setText] = useState('')
   const lastSubject = [...convo.items].reverse().find(i => i.kind === 'email' && i.subject)?.subject
   const [subject, setSubject] = useState(lastSubject ? (lastSubject.startsWith('Re:') ? lastSubject : `Re: ${lastSubject}`) : '')
@@ -408,7 +414,7 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
         <div className="flex items-center gap-3 min-w-0">
           <Avatar name={convo.name} />
           <div className="min-w-0">
-            <p className="text-[14.5px] font-semibold text-ink m-0 truncate">{convo.name}</p>
+            <p className="text-[14.5px] font-semibold text-ink m-0 truncate">{leadDisplayName(convo.name)}</p>
             <p className="text-[12px] text-ink-3 m-0 truncate">
               {convo.phone ? formatPhone(convo.phone) : ''}{convo.phone && convo.email ? ' · ' : ''}{convo.email ?? ''}
             </p>
@@ -420,7 +426,7 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 bg-[#fafbfe]">
+      <div ref={messagesRef} className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 bg-[#faf8f2]">
         {convo.items.map(m => (
           <div key={m.key} className={cn('flex flex-col max-w-[76%]', m.dir === 'out' ? 'self-end items-end' : 'self-start items-start')}>
             {m.kind === 'email' && m.subject && (
@@ -429,7 +435,7 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
             <div className={cn('rounded-2xl px-3.5 py-2.5 text-[13.5px] whitespace-pre-wrap break-words',
               m.dir === 'out'
                 ? cn(m.kind === 'sms' ? 'bg-accent' : EMAIL.solid, 'text-white rounded-br-sm')
-                : cn('bg-white border text-ink rounded-bl-sm', m.kind === 'sms' ? 'border-[#c7d2fe]' : EMAIL.border))}>
+                : cn('bg-white border text-ink rounded-bl-sm', m.kind === 'sms' ? 'border-[#e6d9bd]' : EMAIL.border))}>
               {m.text}
             </div>
             <span className="text-[10.5px] mt-1 flex items-center gap-1">
@@ -493,7 +499,7 @@ function ChannelBtn({ tone, active, onClick, icon, label }: { tone: 'sms' | 'ema
       onClick={onClick}
       className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12.5px] font-semibold border transition-colors',
         active
-          ? tone === 'sms' ? 'bg-accent-soft text-accent border-accent/30' : cn(EMAIL.soft, 'border-[#0d9488]/30')
+          ? tone === 'sms' ? 'bg-accent-soft text-accent border-accent/30' : cn(EMAIL.soft, 'border-[#2B354E]/30')
           : 'bg-card text-ink-2 border-line hover:text-ink')}
     >
       {icon} {label}

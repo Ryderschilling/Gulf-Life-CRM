@@ -28,14 +28,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.is_completed !== undefined) {
       updates.is_completed = body.is_completed
       updates.completed_at = body.is_completed ? now : null
-      // Auto-archive when completed
-      if (body.is_completed) {
-        updates.is_archived = true
-        updates.archived_at = now
+      // NOTE: completing does NOT auto-archive anymore — completed tasks stay
+      // visible in the To-Do page's collapsed "completed" section (with undo)
+      // until "Clear done" archives them. Un-completing also un-archives, so
+      // undo always brings the task back.
+      if (!body.is_completed) {
+        updates.is_archived = false
+        updates.archived_at = null
       }
     }
 
-    if (body.is_archived !== undefined && !updates.is_archived) {
+    if (body.is_archived !== undefined) {
       updates.is_archived = body.is_archived
       updates.archived_at = body.is_archived ? now : null
     }

@@ -147,7 +147,7 @@ function ChatTab() {
               onClick={() => openConversation(c.id)}
               className={cn(
                 'group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer mb-0.5 transition-colors',
-                activeId === c.id ? 'bg-accent-soft' : 'hover:bg-[#f5f6fa]'
+                activeId === c.id ? 'bg-accent-soft' : 'hover:bg-[#f6f3ec]'
               )}
             >
               <MessageSquare size={13} className={activeId === c.id ? 'text-accent shrink-0' : 'text-ink-3 shrink-0'} />
@@ -189,7 +189,7 @@ function ChatTab() {
                     key={s}
                     onClick={() => send(s)}
                     style={{ animationDelay: `${120 + i * 70}ms` }}
-                    className="ai-rise ai-suggest text-left text-[13px] text-ink-2 bg-[#f7f8fb] border border-line rounded-xl px-4 py-2.5"
+                    className="ai-rise ai-suggest text-left text-[13px] text-ink-2 bg-[#f7f4ed] border border-line rounded-xl px-4 py-2.5"
                   >
                     {s}
                   </button>
@@ -211,7 +211,7 @@ function ChatTab() {
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
               rows={1}
               placeholder="Ask or instruct…"
-              className="flex-1 bg-[#f7f8fb] border border-line-strong rounded-xl px-4 py-2.5 text-[14px] text-ink resize-none max-h-36"
+              className="flex-1 bg-[#f7f4ed] border border-line-strong rounded-xl px-4 py-2.5 text-[14px] text-ink resize-none max-h-36"
               style={{ minHeight: 44 }}
             />
             <button
@@ -289,12 +289,12 @@ function BrainTab() {
                   onClick={() => toggleActive(file)}
                   className={cn(
                     'text-[11px] font-bold px-2 py-1 rounded-md transition-colors',
-                    file.is_active ? 'bg-good-soft text-good' : 'bg-[#f2f4f7] text-ink-3'
+                    file.is_active ? 'bg-good-soft text-good' : 'bg-[#f0ebe1] text-ink-3'
                   )}
                 >
                   {file.is_active ? 'Active' : 'Off'}
                 </button>
-                <button onClick={() => setEditing(file)} className="w-7 h-7 rounded-md flex items-center justify-center text-ink-3 hover:bg-[#f2f4f7] hover:text-ink">
+                <button onClick={() => setEditing(file)} className="w-7 h-7 rounded-md flex items-center justify-center text-ink-3 hover:bg-[#f0ebe1] hover:text-ink">
                   <Pencil size={13} />
                 </button>
               </div>

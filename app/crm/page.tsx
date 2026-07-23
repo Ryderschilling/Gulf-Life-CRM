@@ -15,7 +15,7 @@ export default async function OverviewPage() {
     .select("*")
     .eq("lead_type", "owner")
     .eq("relationship", segment)
-    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(2000);
 
   return <LeadsOverview leads={(leads ?? []) as Lead[]} segment={segment} />;

@@ -9,6 +9,7 @@
 // ============================================================
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { followUpStatus } from './dates'
 
 export async function buildAIContext(
   supabase: SupabaseClient,
@@ -147,7 +148,7 @@ export async function buildAIContext(
         const daysSince = l.last_contacted_at
           ? Math.floor((Date.now() - new Date(l.last_contacted_at).getTime()) / 86400000)
           : null
-        const overdue = l.next_follow_up_at && new Date(l.next_follow_up_at) < new Date()
+        const overdue = followUpStatus(l.next_follow_up_at) === 'overdue' // CRM-local calendar rule (lib/dates.ts)
         return `- ${l.name} | ${l.status} | ${l.source ?? 'source unknown'} | Last contact: ${daysSince != null ? `${daysSince}d ago` : 'never'}${overdue ? ' ⚠️ FOLLOW-UP OVERDUE' : ''}`
       }).join('\n')
 

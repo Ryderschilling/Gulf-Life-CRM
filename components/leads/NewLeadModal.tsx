@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
 import type { LeadStatus } from '@/lib/types'
 import { STATUS_CONFIG } from '@/lib/utils'
+import { localTimeToISO } from '@/lib/dates'
 import { Modal, Field, Input, Select, Textarea, Button } from '@/components/ui/kit'
 
 const OWNER_STAGES: LeadStatus[] = ['new', 'contacted', 'nurturing', 'proposal']
@@ -40,7 +41,7 @@ export default function NewLeadModal({ open, onClose, relationship = 'prospect' 
         status: form.status,
         source: form.source,
         property_interest: form.property_interest.trim() || null,
-        next_follow_up_at: form.next_follow_up_at ? new Date(form.next_follow_up_at + 'T09:00:00').toISOString() : null,
+        next_follow_up_at: form.next_follow_up_at ? localTimeToISO(form.next_follow_up_at) : null, // 9am CRM-local on the chosen day
       }).select('id').single()
 
       if (error) throw error

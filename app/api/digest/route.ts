@@ -5,14 +5,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getOpenAI, CONCIERGE_SYSTEM_PROMPT } from '@/lib/openai'
+import { todayStr, endOfTodayISO, startOfMonthISO, followUpStatus, daysOverdue, timeOfDayGreeting } from '@/lib/dates'
 import type { Lead, DigestContent, DigestStats } from '@/lib/types'
 
-const todayStr = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) // YYYY-MM-DD
+/** Swap any "[Your Name]"-style placeholder in generated copy for the real
+ *  signed-in user so the suggested messages are paste-ready. */
+function fillName(text: string, userName: string): string {
+  return text.replace(/\[\s*(your\s*name|name|first\s*name|sender(\s*name)?)\s*\]/gi, userName)
+}
 
-async function generateDigest(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function generateDigest(supabase: Awaited<ReturnType<typeof createClient>>, userName: string) {
   const now = new Date()
   const oneWeekAgo = new Date(now.getTime() - 7 * 86400000).toISOString()
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const startOfMonth = startOfMonthISO() // CRM-local calendar month — same rule as the Won This Month stat cards
+  const greeting = timeOfDayGreeting()
 
   // Pull all the data we need in parallel
   const [
@@ -23,7 +29,7 @@ async function generateDigest(supabase: Awaited<ReturnType<typeof createClient>>
     newThisWeekResult,
   ] = await Promise.all([
     supabase.from('leads').select('*').eq('lead_type', 'owner').eq('relationship', 'prospect').not('status', 'in', '("closed_won","closed_lost")'),
-    supabase.from('leads').select('*').eq('lead_type', 'owner').eq('relationship', 'prospect').lte('next_follow_up_at', now.toISOString()).not('status', 'in', '("closed_won","closed_lost")').order('next_follow_up_at', { ascending: true }),
+    supabase.from('leads').select('*').eq('lead_type', 'owner').eq('relationship', 'prospect').lte('next_follow_up_at', endOfTodayISO()).not('status', 'in', '("closed_won","closed_lost")').order('next_follow_up_at', { ascending: true }),
     supabase.from('email_drafts').select('count').eq('status', 'pending').single(),
     supabase.from('leads').select('count').eq('lead_type', 'owner').eq('relationship', 'prospect').eq('status', 'closed_won').gte('updated_at', startOfMonth).single(),
     supabase.from('leads').select('count').eq('lead_type', 'owner').eq('relationship', 'prospect').gte('created_at', oneWeekAgo).single(),
@@ -56,8 +62,8 @@ async function generateDigest(supabase: Awaited<ReturnType<typeof createClient>>
   const topLeads = [...allLeads]
     .filter(l => !['closed_won', 'closed_lost'].includes(l.status))
     .sort((a, b) => {
-      const aOverdue = a.next_follow_up_at && new Date(a.next_follow_up_at) < now ? -1 : 0
-      const bOverdue = b.next_follow_up_at && new Date(b.next_follow_up_at) < now ? -1 : 0
+      const aOverdue = followUpStatus(a.next_follow_up_at) === 'overdue' ? -1 : 0
+      const bOverdue = followUpStatus(b.next_follow_up_at) === 'overdue' ? -1 : 0
       if (aOverdue !== bOverdue) return aOverdue - bOverdue
       return (priorityOrder[a.status] ?? 9) - (priorityOrder[b.status] ?? 9)
     })
@@ -66,7 +72,7 @@ async function generateDigest(supabase: Awaited<ReturnType<typeof createClient>>
   if (topLeads.length === 0) {
     // No leads — return a simple digest
     const emptyContent: DigestContent = {
-      greeting: `Good morning! Here's your overview for ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.`,
+      greeting: `${greeting}! Here's your overview for ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/Chicago' })}.`,
       summary: 'No active leads in the pipeline right now. Great time to prospect and add new leads.',
       priority_leads: [],
       stats,
@@ -79,8 +85,8 @@ async function generateDigest(supabase: Awaited<ReturnType<typeof createClient>>
     const daysSince = l.last_contacted_at
       ? Math.floor((now.getTime() - new Date(l.last_contacted_at).getTime()) / 86400000)
       : null
-    const followUpOverdue = l.next_follow_up_at && new Date(l.next_follow_up_at) < now
-      ? Math.floor((now.getTime() - new Date(l.next_follow_up_at).getTime()) / 86400000)
+    const followUpOverdue = l.next_follow_up_at && followUpStatus(l.next_follow_up_at) === 'overdue'
+      ? daysOverdue(l.next_follow_up_at)
       : null
     return {
       id: l.id,
@@ -96,7 +102,9 @@ async function generateDigest(supabase: Awaited<ReturnType<typeof createClient>>
     }
   })
 
-  const aiPrompt = `Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.
+  const aiPrompt = `Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/Chicago' })}.
+
+This briefing is for ${userName}. Sign each "suggested_message" as ${userName} — do not leave a name placeholder in the copy.
 
 Here are the top leads that need attention today for Gulf Life Concierge. Pick the 5 most important and create a structured daily briefing.
 
@@ -113,7 +121,7 @@ ${JSON.stringify(leadsForAI, null, 2)}
 
 Return a JSON object with this exact structure (no markdown, just raw JSON):
 {
-  "greeting": "Good morning! [1 sentence overview of the day]",
+  "greeting": "${greeting}! [1 sentence overview of the day]",
   "summary": "[2-3 sentence summary of what needs attention today and the overall pipeline health]",
   "priority_leads": [
     {
@@ -147,14 +155,26 @@ Return a JSON object with this exact structure (no markdown, just raw JSON):
   const aiContent = JSON.parse(rawJson) as Partial<DigestContent>
 
   const content: DigestContent = {
-    greeting: aiContent.greeting ?? `Good morning! Here's your briefing for today.`,
-    summary: aiContent.summary ?? '',
-    priority_leads: aiContent.priority_leads ?? [],
+    greeting: fillName(aiContent.greeting ?? `${greeting}! Here's your briefing for today.`, userName),
+    summary: fillName(aiContent.summary ?? '', userName),
+    priority_leads: (aiContent.priority_leads ?? []).map(pl => ({
+      ...pl,
+      suggested_message: fillName(pl.suggested_message ?? '', userName),
+    })),
     stats,
-    action_items: aiContent.action_items ?? [],
+    action_items: (aiContent.action_items ?? []).map(a => fillName(a, userName)),
   }
 
   return content
+}
+
+/** The signed-in user's display name (same fallback chain as the sidebar). */
+async function getUserName(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, email?: string | null): Promise<string> {
+  const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).single()
+  const rawName = (profile?.full_name ?? '') as string
+  if (rawName && !rawName.includes('@')) return rawName
+  const fromEmail = email?.split('@')[0] ?? ''
+  return fromEmail ? fromEmail.replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'The Gulf Life Team'
 }
 
 export async function GET() {
@@ -179,7 +199,8 @@ export async function GET() {
     }
 
     // Generate and cache
-    const content = await generateDigest(supabase)
+    const userName = await getUserName(supabase, user.id, user.email)
+    const content = await generateDigest(supabase, userName)
 
     const { data: digest, error } = await supabase
       .from('daily_digests')
@@ -220,7 +241,8 @@ export async function POST(req: NextRequest) {
       .eq('digest_date', todayStr())
       .eq('digest_type', 'sales_rep')
 
-    const content = await generateDigest(supabase)
+    const userName = await getUserName(supabase, user.id, user.email)
+    const content = await generateDigest(supabase, userName)
 
     const { data: digest, error } = await supabase
       .from('daily_digests')

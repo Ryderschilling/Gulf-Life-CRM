@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
     // Syncs whatever is new or changed since its last sync; demo leads excluded.
     if (body.mode === 'outstanding') {
       const result = await syncOutstandingLeads(supabase)
+      if (result.failed > 0) {
+        console.error(`[mailchimp] outstanding sync: ${result.failed} failed —`, JSON.stringify(result.failures))
+      }
       return NextResponse.json(result)
     }
 
@@ -56,6 +59,13 @@ export async function POST(req: NextRequest) {
       } else {
         failed++
         failures.push({ name: lead.name, error: result.error ?? 'Unknown' })
+        console.error(`[mailchimp] manual sync failed for ${lead.name} <${lead.email}>: ${result.error ?? 'Unknown'}`)
+        // Surface on the lead's timeline the first time it fails (no spam on retries)
+        if (lead.mailchimp_status !== 'failed') {
+          await supabase.from('lead_activities').insert({
+            lead_id: lead.id, user_id: user.id, type: 'mailchimp_sync', body: `Mailchimp sync failed: ${result.error ?? 'Unknown'}`,
+          })
+        }
         await supabase.from('leads').update({ mailchimp_status: 'failed' }).eq('id', lead.id)
       }
     }

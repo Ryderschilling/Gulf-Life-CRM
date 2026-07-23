@@ -4,6 +4,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import AIDrawer from "@/components/ai/AIDrawer";
 import { Toaster } from "react-hot-toast";
 import { getSegment } from "@/lib/segment";
+import { countPendingTodoItems } from "@/lib/badge";
 import type { Profile } from "@/lib/types";
 
 export default async function CRMLayout({ children }: { children: React.ReactNode }) {
@@ -29,16 +30,12 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
     ? { ...profile, full_name: displayName }
     : null;
 
-  // Pending to-do badge: open todos + pending drafts + due follow-ups
+  // Pending to-do badge: open todos + pending drafts + due follow-ups.
+  // Shared with /api/todos/count (which the Sidebar refetches on navigation,
+  // since layouts don't re-run on soft navigation and the badge went stale).
   let pendingTodoCount = 0;
   try {
-    const now = new Date().toISOString();
-    const [todos, drafts, followUps] = await Promise.all([
-      supabase.from("todos").select("id", { count: "exact", head: true }).eq("is_completed", false).eq("is_archived", false),
-      supabase.from("email_drafts").select("id", { count: "exact", head: true }).eq("status", "pending"),
-      supabase.from("leads").select("id", { count: "exact", head: true }).lte("next_follow_up_at", now).not("status", "in", '("closed_won","closed_lost")'),
-    ]);
-    pendingTodoCount = (todos.count ?? 0) + (drafts.count ?? 0) + (followUps.count ?? 0);
+    pendingTodoCount = await countPendingTodoItems(supabase);
   } catch {
     // Schema not applied yet — badge shows 0
   }
@@ -57,8 +54,8 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
         toastOptions={{
           style: {
             background: "#ffffff",
-            color: "#111322",
-            border: "1px solid #eceef3",
+            color: "#1f2941",
+            border: "1px solid #ebe6da",
             borderRadius: "12px",
             fontSize: "13.5px",
             fontFamily: "Inter, system-ui, sans-serif",

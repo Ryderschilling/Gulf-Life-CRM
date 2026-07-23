@@ -99,7 +99,7 @@ export default function SettingsClient({ email, profile }: { email: string; prof
                 <div key={intg.key} className="flex items-start gap-3.5 border border-line rounded-xl px-4 py-3.5">
                   <div className={cn(
                     'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
-                    s.ok ? 'bg-good-soft text-good' : 'bg-[#f2f4f7] text-ink-3'
+                    s.ok ? 'bg-good-soft text-good' : 'bg-[#f0ebe1] text-ink-3'
                   )}>
                     {intg.icon}
                   </div>
@@ -115,7 +115,7 @@ export default function SettingsClient({ email, profile }: { email: string; prof
                       {s.detail}
                     </p>
                     {!s.ok && (
-                      <p className="text-[11.5px] text-ink-3 m-0 mt-1 font-mono bg-[#f7f8fb] rounded px-2 py-1 inline-block">
+                      <p className="text-[11.5px] text-ink-3 m-0 mt-1 font-mono bg-[#f7f4ed] rounded px-2 py-1 inline-block">
                         {intg.env}
                       </p>
                     )}

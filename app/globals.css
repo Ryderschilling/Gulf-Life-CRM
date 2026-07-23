@@ -4,29 +4,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Gulf Life brand — warm cream ground, navy ink, antique gold accent.
+   Matches the logo (gold key / navy wordmark) + campaign email template. */
 :root {
-  --bg:          #f6f7fb;
+  --bg:          #f7f5f0;
   --card:        #ffffff;
-  --border:      #eceef3;
-  --border-2:    #e2e5ec;
-  --text:        #111322;
-  --text-2:      #667085;
-  --text-3:      #98a2b3;
-  --accent:      #6366f1;
-  --accent-dark: #4f52e0;
-  --accent-soft: #eef0fe;
+  --border:      #ebe6da;
+  --border-2:    #ddd6c6;
+  --text:        #1f2941;
+  --text-2:      #5d6577;
+  --text-3:      #9aa1b0;
+  --accent:      #a08447;
+  --accent-dark: #7f6434;
+  --accent-soft: #f4eee0;
+  --navy:        #2B354E;
   --green:       #12b76a;
   --green-soft:  #e7f7ef;
   --yellow:      #f79009;
   --yellow-soft: #fef2e2;
   --red:         #f04438;
   --red-soft:    #fdebea;
-  --blue:        #2e90fa;
-  --blue-soft:   #e8f2fe;
-  --violet:      #875bf7;
-  --violet-soft: #f1ebfe;
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 2px 6px rgba(16, 24, 40, 0.04);
-  --shadow-pop:  0 12px 32px rgba(16, 24, 40, 0.14);
+  --blue:        #2B354E;
+  --blue-soft:   #eef1f7;
+  --violet:      #7d5b8f;
+  --violet-soft: #f3eef7;
+  --shadow-card: 0 1px 2px rgba(31, 41, 65, 0.04), 0 2px 6px rgba(31, 41, 65, 0.04);
+  --shadow-pop:  0 12px 32px rgba(31, 41, 65, 0.14);
 }
 
 * { box-sizing: border-box; }
@@ -42,8 +45,8 @@ html, body {
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d6dae2; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #b6bcc9; }
+::-webkit-scrollbar-thumb { background: #d8d1c2; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #c1b8a1; }
 
 input, select, textarea, button { font-family: inherit; }
 
@@ -52,7 +55,7 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 3px rgba(160, 132, 71, 0.16);
 }
 
 @keyframes pulse-dot {
@@ -87,16 +90,16 @@ input:focus, select:focus, textarea:focus {
 
 /* ════════════════════════════════════════════════════════════
    Gulf AI — identity & motion system
-   The AI gets its own gradient (indigo → violet → gulf teal)
-   so it reads as a distinct, premium layer of the product.
+   Champagne-gold gradient pulled straight from the brand
+   (same gradient as the Gulf Life site's concierge button).
    Mark lives in components/ai/AIMark.tsx.
    ════════════════════════════════════════════════════════════ */
 
 :root {
-  --ai-1: #6366f1;
-  --ai-2: #8b5cf6;
-  --ai-3: #06b6d4;
-  --ai-grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 55%, #06b6d4 130%);
+  --ai-1: #c9a96e;
+  --ai-2: #AB9055;
+  --ai-3: #907240;
+  --ai-grad: linear-gradient(135deg, #c9a96e 0%, #AB9055 55%, #907240 130%);
 }
 
 /* — the mark — */
@@ -119,7 +122,7 @@ input:focus, select:focus, textarea:focus {
 @keyframes ai-chip { from { opacity: 0; transform: scale(0.85) translateY(4px); } }
 @keyframes ai-rise { from { opacity: 0; transform: translateY(12px); } }
 
-.ai-overlay { position: fixed; inset: 0; background: rgba(17, 19, 34, 0.28); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: ai-fade 0.25s ease both; }
+.ai-overlay { position: fixed; inset: 0; background: rgba(28, 36, 56, 0.3); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: ai-fade 0.25s ease both; }
 .ai-panel { animation: ai-panel 0.36s cubic-bezier(0.32, 0.72, 0.28, 1) both; }
 .ai-msg-in { animation: ai-msg 0.32s cubic-bezier(0.21, 1.02, 0.55, 1) both; }
 .ai-chip-in { animation: ai-chip 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
@@ -128,7 +131,7 @@ input:focus, select:focus, textarea:focus {
 /* — shimmer / gradient text — */
 @keyframes ai-shimmer { to { background-position: -200% 0; } }
 .ai-shimmer-text {
-  background: linear-gradient(90deg, var(--ai-1), var(--ai-2) 40%, var(--ai-3) 60%, var(--ai-1));
+  background: linear-gradient(90deg, var(--ai-3), var(--ai-2) 40%, var(--ai-1) 60%, var(--ai-3));
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -147,7 +150,7 @@ input:focus, select:focus, textarea:focus {
 .ai-orb {
   position: relative;
   background-image: var(--ai-grad);
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.38), 0 2px 6px rgba(16, 24, 40, 0.12);
+  box-shadow: 0 8px 24px rgba(144, 114, 64, 0.4), 0 2px 6px rgba(31, 41, 65, 0.12);
   transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
 .ai-orb::before {
@@ -155,11 +158,11 @@ input:focus, select:focus, textarea:focus {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: 2px solid rgba(139, 92, 246, 0.5);
+  border: 2px solid rgba(171, 144, 85, 0.55);
   animation: ai-ripple 3.2s ease-out infinite;
   pointer-events: none;
 }
-.ai-orb:hover { transform: scale(1.07); filter: brightness(1.05); box-shadow: 0 12px 32px rgba(99, 102, 241, 0.5), 0 2px 8px rgba(16, 24, 40, 0.14); }
+.ai-orb:hover { transform: scale(1.07); filter: brightness(1.05); box-shadow: 0 12px 32px rgba(144, 114, 64, 0.5), 0 2px 8px rgba(31, 41, 65, 0.14); }
 .ai-orb:active { transform: scale(0.96); }
 
 /* — AI gradient button (layered on the kit Button) — */
@@ -167,12 +170,12 @@ input:focus, select:focus, textarea:focus {
   position: relative;
   overflow: hidden;
   background-image: var(--ai-grad);
-  background-color: var(--ai-1);
+  background-color: var(--ai-2);
   color: #fff;
   border-color: transparent;
   transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
-.ai-btn:hover:not(:disabled) { filter: brightness(1.07); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35); color: #fff; }
+.ai-btn:hover:not(:disabled) { filter: brightness(1.07); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(144, 114, 64, 0.35); color: #fff; }
 .ai-btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 .ai-btn::after {
   content: '';
@@ -190,12 +193,12 @@ input:focus, select:focus, textarea:focus {
   border-color: transparent;
   background:
     linear-gradient(var(--card), var(--card)) padding-box,
-    linear-gradient(135deg, rgba(99, 102, 241, 0.45), rgba(139, 92, 246, 0.35) 50%, rgba(6, 182, 212, 0.45)) border-box;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 20px rgba(139, 92, 246, 0.09);
+    linear-gradient(135deg, rgba(201, 169, 110, 0.55), rgba(171, 144, 85, 0.4) 50%, rgba(144, 114, 64, 0.55)) border-box;
+  box-shadow: 0 1px 2px rgba(31, 41, 65, 0.04), 0 6px 20px rgba(171, 144, 85, 0.12);
 }
 
 /* — misc AI pieces — */
-.ai-hairline { height: 2px; background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.55) 25%, rgba(139, 92, 246, 0.55) 50%, rgba(6, 182, 212, 0.55) 75%, transparent); }
+.ai-hairline { height: 2px; background: linear-gradient(90deg, transparent, rgba(201, 169, 110, 0.6) 25%, rgba(171, 144, 85, 0.6) 50%, rgba(144, 114, 64, 0.6) 75%, transparent); }
 .ai-msg-user { background-image: var(--ai-grad); }
 .ai-badge {
   display: inline-flex;
@@ -206,12 +209,12 @@ input:focus, select:focus, textarea:focus {
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: #7c5cf5;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(6, 182, 212, 0.1));
-  border: 1px solid rgba(139, 92, 246, 0.28);
+  color: #7f6434;
+  background: linear-gradient(135deg, rgba(201, 169, 110, 0.12), rgba(171, 144, 85, 0.12));
+  border: 1px solid rgba(171, 144, 85, 0.32);
 }
 .ai-suggest { transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease; }
-.ai-suggest:hover { transform: translateY(-1px); border-color: rgba(139, 92, 246, 0.45); background-color: #fff; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.12); }
+.ai-suggest:hover { transform: translateY(-1px); border-color: rgba(171, 144, 85, 0.5); background-color: #fff; box-shadow: 0 4px 14px rgba(171, 144, 85, 0.14); }
 
 @media (prefers-reduced-motion: reduce) {
   .ai-wave-a, .ai-wave-b, .ai-ring, .ai-breathe, .ai-orb::before,

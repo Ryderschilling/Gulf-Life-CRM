@@ -12,7 +12,8 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { Todo, EmailDraft, Lead, DailyDigest, PriorityLead } from '@/lib/types'
-import { STATUS_CONFIG, formatPhone, timeAgo, cn } from '@/lib/utils'
+import { STATUS_CONFIG, formatPhone, timeAgo, leadDisplayName, cn } from '@/lib/utils'
+import { followUpStatus, daysOverdue } from '@/lib/dates'
 import { Card, CardHeader, Button, Pill, Avatar, Input, EmptyState, Textarea } from '@/components/ui/kit'
 import { AIMark, AIThinking, AIBadge } from '@/components/ai/AIMark'
 
@@ -141,7 +142,7 @@ function DigestCard({ initialDigest }: { initialDigest: DailyDigest | null }) {
               <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0 mb-2">Also today</p>
               <div className="flex flex-col gap-1.5">
                 {content.action_items.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2 bg-[#f7f8fb] rounded-lg px-3.5 py-2">
+                  <div key={i} className="flex items-center justify-between gap-2 bg-[#f7f4ed] rounded-lg px-3.5 py-2">
                     <span className="text-[13px] text-ink">{item}</span>
                     <button onClick={() => addActionAsTodo(item)} className="text-accent hover:text-accent-dark shrink-0" title="Add as task">
                       <Plus size={15} />
@@ -189,7 +190,7 @@ function PriorityLeadRow({ pl, expanded, onToggle }: { pl: PriorityLead; expande
 
   return (
     <div className="border border-line rounded-xl overflow-hidden">
-      <button onClick={onToggle} className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-[#fafbfe] transition-colors text-left">
+      <button onClick={onToggle} className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-[#faf8f2] transition-colors text-left">
         <Avatar name={pl.lead_name} size={30} />
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-semibold text-ink m-0 flex items-center gap-2">
@@ -205,7 +206,7 @@ function PriorityLeadRow({ pl, expanded, onToggle }: { pl: PriorityLead; expande
         {expanded ? <ChevronUp size={15} className="text-ink-3 shrink-0" /> : <ChevronDown size={15} className="text-ink-3 shrink-0" />}
       </button>
       {expanded && (
-        <div className="px-4 pb-4 pt-1 bg-[#fafbfe] border-t border-line">
+        <div className="px-4 pb-4 pt-1 bg-[#faf8f2] border-t border-line">
           <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0 mb-1.5">What to say</p>
           <p className="text-[13px] text-ink m-0 bg-card border border-line rounded-lg px-3.5 py-3 whitespace-pre-wrap">
             {pl.suggested_message}
@@ -257,11 +258,35 @@ function TasksCard({ openTodos, doneTodos }: { openTodos: Todo[]; doneTodos: Tod
   }
 
   async function toggle(todo: Todo) {
+    const completing = !todo.is_completed
     await fetch(`/api/todos/${todo.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_completed: !todo.is_completed }),
+      body: JSON.stringify({ is_completed: completing }),
     })
+    if (completing) {
+      // Brief undo window — the task also stays in the collapsed "completed"
+      // list below, so nothing vanishes for good until "Clear done".
+      toast(t => (
+        <span className="flex items-center gap-3">
+          <span>Task completed</span>
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id)
+              await fetch(`/api/todos/${todo.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_completed: false }),
+              })
+              router.refresh()
+            }}
+            className="font-bold text-accent hover:underline"
+          >
+            Undo
+          </button>
+        </span>
+      ), { duration: 5000, icon: '✓' })
+    }
     router.refresh()
   }
 
@@ -419,7 +444,7 @@ function DraftRow({ draft }: { draft: EmailDraft }) {
 
   return (
     <div className="border border-line rounded-xl overflow-hidden">
-      <button onClick={() => setExpanded(e => !e)} className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-[#fafbfe] transition-colors text-left">
+      <button onClick={() => setExpanded(e => !e)} className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-[#faf8f2] transition-colors text-left">
         <div className="w-8 h-8 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
           <Mail size={14} />
         </div>
@@ -432,7 +457,7 @@ function DraftRow({ draft }: { draft: EmailDraft }) {
         {expanded ? <ChevronUp size={15} className="text-ink-3 shrink-0" /> : <ChevronDown size={15} className="text-ink-3 shrink-0" />}
       </button>
       {expanded && (
-        <div className="px-4 pb-4 pt-2 bg-[#fafbfe] border-t border-line flex flex-col gap-2.5">
+        <div className="px-4 pb-4 pt-2 bg-[#faf8f2] border-t border-line flex flex-col gap-2.5">
           <Input value={subject} onChange={e => setSubject(e.target.value)} className="font-semibold" />
           <Textarea value={body} onChange={e => setBody(e.target.value)} rows={8} className="text-[13px]" />
           <div className="flex items-center justify-between">
@@ -455,31 +480,31 @@ function DraftRow({ draft }: { draft: EmailDraft }) {
 
 function FollowUpsCard({ followUps }: { followUps: Lead[] }) {
   if (followUps.length === 0) return null
-  const now = new Date()
   return (
     <Card>
       <CardHeader title="Follow-ups due" subtitle="Owner leads whose follow-up date has arrived" />
       <div className="px-6 pb-5 flex flex-col gap-2">
         {followUps.map(lead => {
-          const overdueDays = lead.next_follow_up_at
-            ? Math.floor((now.getTime() - new Date(lead.next_follow_up_at).getTime()) / 86400000)
-            : 0
+          // Same CRM-local calendar rule as Pipeline / Overview (lib/dates.ts):
+          // date < today = overdue, date = today = due today.
+          const overdue = followUpStatus(lead.next_follow_up_at) === 'overdue'
+          const overdueDays = lead.next_follow_up_at ? daysOverdue(lead.next_follow_up_at) : 0
           return (
             <Link key={lead.id} href={`/crm/leads/${lead.id}`} className="no-underline">
               <div className="flex items-center gap-3 border border-line rounded-xl px-4 py-3 hover:border-accent/40 transition-colors">
                 <Avatar name={lead.name} size={32} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[13.5px] font-semibold text-ink m-0 flex items-center gap-2">
-                    {lead.name}
+                    {leadDisplayName(lead.name)}
                     <Pill tone={STATUS_CONFIG[lead.status].tone} className="text-[10.5px] px-1.5 py-0.5">
                       {STATUS_CONFIG[lead.status].label}
                     </Pill>
                   </p>
                   <p className="text-[12px] text-ink-3 m-0">{formatPhone(lead.phone)}</p>
                 </div>
-                <Pill tone={overdueDays > 0 ? 'red' : 'yellow'} className="shrink-0">
+                <Pill tone={overdue ? 'red' : 'yellow'} className="shrink-0">
                   <CalendarClock size={12} />
-                  {overdueDays > 0 ? `${overdueDays}d overdue` : 'Due today'}
+                  {overdue ? `${overdueDays}d overdue` : 'Due today'}
                 </Pill>
               </div>
             </Link>

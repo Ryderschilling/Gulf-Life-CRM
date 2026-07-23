@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import { Users, CalendarClock, UserPlus, Trophy, Mail, Phone, Plus, Search, ChevronRight, ChevronLeft } from 'lucide-react'
 import type { Lead, LeadStatus } from '@/lib/types'
 import type { Segment } from '@/lib/segment'
-import { STATUS_CONFIG, ORDERED_STATUSES, formatPhone, timeAgo, followUpState, sourceLabel, cn } from '@/lib/utils'
+import { STATUS_CONFIG, ORDERED_STATUSES, formatPhone, timeAgo, followUpState, isWonThisMonth, leadDisplayName, sourceLabel, cn } from '@/lib/utils'
 import { Card, StatCard, Pill, Button, Input, PageHeader, Th, Td, Avatar, EmptyState } from '@/components/ui/kit'
 import NewLeadModal from '@/components/leads/NewLeadModal'
 
@@ -32,14 +32,21 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
     const s = followUpState(l)
     return (s === 'overdue' || s === 'today') && !['closed_won', 'closed_lost'].includes(l.status)
   }).length
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
-  const wonThisMonth = leads.filter(l => l.status === 'closed_won' && new Date(l.updated_at) >= monthStart).length
+  // Shared helper (lib/utils.ts) — keeps this card in lockstep with Analytics + the briefing
+  const wonThisMonth = leads.filter(isWonThisMonth).length
   const withEmail = leads.filter(l => l.email).length
   const withPhone = leads.filter(l => l.phone).length
 
   // ── Filtering ──────────────────────────────────────────────
+  // Stable default order: newest added first. Sorting here (not relying on the
+  // server) keeps the list from reshuffling when updated_at gets bumped by
+  // Mailchimp syncs or other background writes.
+  const sorted = useMemo(
+    () => [...leads].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [leads]
+  )
   const filtered = useMemo(() => {
-    let list = leads
+    let list = sorted
     if (!isClient && stageFilter !== 'all') list = list.filter(l => l.status === stageFilter)
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -51,7 +58,7 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
       )
     }
     return list
-  }, [leads, stageFilter, search, isClient])
+  }, [sorted, stageFilter, search, isClient])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -92,7 +99,10 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-4">
           <h2 className="text-[15px] font-semibold text-ink m-0">
-            {isClient ? 'All homeowners' : 'All leads'} <span className="text-ink-3 font-medium">· {leads.length}</span>
+            {isClient ? 'All homeowners' : 'All leads'}{' '}
+            <span className="text-ink-3 font-medium">
+              · {filtered.length}{filtered.length !== leads.length ? ` of ${leads.length}` : ''}
+            </span>
           </h2>
           <div className="relative w-full sm:w-[260px]">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
@@ -176,7 +186,7 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
                     onClick={() => setPage(n as number)}
                     className={cn(
                       'min-w-[30px] h-[30px] rounded-lg text-[13px] font-semibold transition-colors',
-                      n === safePage ? 'bg-accent text-white' : 'text-ink-2 hover:bg-[#f2f4f7]'
+                      n === safePage ? 'bg-accent text-white' : 'text-ink-2 hover:bg-[#f0ebe1]'
                     )}
                   >
                     {n}
@@ -219,13 +229,13 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 function LeadRow({ lead, isClient, onClick }: { lead: Lead; isClient: boolean; onClick: () => void }) {
   const fu = followUpState(lead)
   return (
-    <tr onClick={onClick} className="cursor-pointer hover:bg-[#fafbfe] transition-colors group">
+    <tr onClick={onClick} className="cursor-pointer hover:bg-[#faf8f2] transition-colors group">
       <Td className="pl-5">
         <div className="flex items-center gap-3 min-w-[180px]">
           <Avatar name={lead.name} />
           <div className="min-w-0">
             <p className="m-0 font-semibold text-ink text-[14px] truncate flex items-center gap-1.5">
-              {lead.name}
+              {leadDisplayName(lead.name)}
               {!isClient && (fu === 'overdue' || fu === 'today') && (
                 <span
                   className={cn('w-2 h-2 rounded-full inline-block pulse-dot', fu === 'overdue' ? 'bg-bad' : 'bg-warn')}

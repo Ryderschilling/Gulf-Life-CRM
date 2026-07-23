@@ -78,7 +78,10 @@ export async function syncLeadToMailchimp(lead: Lead): Promise<MailchimpSyncResu
 
     if (!memberRes.ok) {
       const err = await memberRes.json().catch(() => null) as { detail?: string } | null
-      return { ok: false, error: `Mailchimp ${memberRes.status}: ${err?.detail ?? 'member upsert failed'}` }
+      const message = `Mailchimp ${memberRes.status}: ${err?.detail ?? 'member upsert failed'}`
+      // Never fail silently — the exact Mailchimp rejection shows up in the server log.
+      console.error(`[mailchimp] sync failed for ${lead.name} <${lead.email}>: ${message}`)
+      return { ok: false, error: message }
     }
 
     // 2. Apply tags (owner lead + pipeline stage + custom tags)
@@ -103,7 +106,9 @@ export async function syncLeadToMailchimp(lead: Lead): Promise<MailchimpSyncResu
 
     return { ok: true }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Mailchimp request failed' }
+    const message = err instanceof Error ? err.message : 'Mailchimp request failed'
+    console.error(`[mailchimp] sync errored for ${lead.name} <${lead.email}>: ${message}`)
+    return { ok: false, error: message }
   }
 }
 
@@ -233,6 +238,32 @@ export async function getMailchimpCampaignReport(campaignId: string): Promise<{ 
       abuse_reports?: number
     }
     const cd = (clicks.ok ? clicks.data : null) as { urls_clicked?: { url: string; total_clicks?: number; unique_clicks?: number; click_percentage?: number }[] } | null
+
+    // Mailchimp reports http/https, www/non-www, and trailing-slash variants of
+    // the same URL as separate rows — merge them and sum the clicks so the
+    // "what people clicked" list reads clean. (Unique clicks are summed across
+    // variants, so someone who clicked two variants counts twice — acceptable.)
+    const urlKey = (url: string) => url.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '')
+    const displayUrl = (url: string) => url.trim().replace(/\/+$/, '') || url.trim()
+    const mergedLinks = new Map<string, { url: string; totalClicks: number; uniqueClicks: number; clickRate: number }>()
+    for (const u of cd?.urls_clicked ?? []) {
+      const key = urlKey(u.url)
+      const row = mergedLinks.get(key)
+      if (row) {
+        row.totalClicks += u.total_clicks ?? 0
+        row.uniqueClicks += u.unique_clicks ?? 0
+        row.clickRate = Math.max(row.clickRate, u.click_percentage ?? 0)
+        if (u.url.trim().toLowerCase().startsWith('https://')) row.url = displayUrl(u.url) // prefer the https variant for display
+      } else {
+        mergedLinks.set(key, {
+          url: displayUrl(u.url),
+          totalClicks: u.total_clicks ?? 0,
+          uniqueClicks: u.unique_clicks ?? 0,
+          clickRate: u.click_percentage ?? 0,
+        })
+      }
+    }
+
     return {
       ok: true,
       report: {
@@ -254,12 +285,7 @@ export async function getMailchimpCampaignReport(campaignId: string): Promise<{ 
         bounces: (d.bounces?.hard_bounces ?? 0) + (d.bounces?.soft_bounces ?? 0) + (d.bounces?.syntax_errors ?? 0),
         unsubscribed: d.unsubscribed ?? 0,
         abuseReports: d.abuse_reports ?? 0,
-        clickedLinks: (cd?.urls_clicked ?? []).map(u => ({
-          url: u.url,
-          totalClicks: u.total_clicks ?? 0,
-          uniqueClicks: u.unique_clicks ?? 0,
-          clickRate: u.click_percentage ?? 0,
-        })),
+        clickedLinks: [...mergedLinks.values()].sort((a, b) => b.totalClicks - a.totalClicks),
       },
     }
   } catch (err) {
@@ -381,13 +407,22 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // the DB trigger — tolerate that self-write so leads don't loop forever.
 const RESYNC_TOLERANCE_MS = 5_000
 
+export interface OutstandingSyncResult {
+  synced: number
+  failed: number
+  skipped: number
+  /** Every lead that failed this pass, with the exact Mailchimp error — so
+   *  callers (and the server log) can see WHY instead of failing silently. */
+  failures: { name: string; email: string | null; error: string }[]
+}
+
 /** Sync every owner lead whose data changed since its last sync (or that
  *  was never synced). Bounded per call; safe to call often. */
 export async function syncOutstandingLeads(
   supabase: SupabaseClient,
   limit = 100,
-): Promise<{ synced: number; failed: number; skipped: number }> {
-  if (!mailchimpConfigured()) return { synced: 0, failed: 0, skipped: 0 }
+): Promise<OutstandingSyncResult> {
+  if (!mailchimpConfigured()) return { synced: 0, failed: 0, skipped: 0, failures: [] }
 
   const { data } = await supabase
     .from('leads')
@@ -399,6 +434,7 @@ export async function syncOutstandingLeads(
 
   const now = new Date().toISOString()
   let synced = 0, failed = 0, skipped = 0
+  const failures: OutstandingSyncResult['failures'] = []
 
   const outstanding = ((data ?? []) as Lead[]).filter(l => {
     if (isDemoLead(l)) { skipped++; return false }
@@ -416,9 +452,21 @@ export async function syncOutstandingLeads(
       await supabase.from('leads').update({ mailchimp_synced_at: now, mailchimp_status: 'synced' }).eq('id', lead.id)
     } else {
       failed++
+      const error = result.error ?? 'Unknown error'
+      failures.push({ name: lead.name, email: lead.email, error })
+      console.error(`[mailchimp] auto-sync failed for ${lead.name} <${lead.email}>: ${error}`)
+      // Surface the failure on the lead's timeline — only on the transition
+      // into 'failed', so repeated auto-sync passes don't spam the timeline.
+      if (lead.mailchimp_status !== 'failed') {
+        await supabase.from('lead_activities').insert({
+          lead_id: lead.id,
+          type: 'mailchimp_sync',
+          body: `Mailchimp sync failed: ${error}`,
+        })
+      }
       await supabase.from('leads').update({ mailchimp_status: 'failed' }).eq('id', lead.id)
     }
   }
 
-  return { synced, failed, skipped }
+  return { synced, failed, skipped, failures }
 }

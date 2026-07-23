@@ -43,7 +43,7 @@ export function AIMark({ size = 20, thinking, breathe, variant = 'color', classN
   const white = variant === 'white'
 
   const ringStroke = white ? 'rgba(255,255,255,0.85)' : `url(#${gid})`
-  const innerFill = white ? 'rgba(255,255,255,0.14)' : 'rgba(99,102,241,0.07)'
+  const innerFill = white ? 'rgba(255,255,255,0.14)' : 'rgba(171,144,85,0.09)'
   const waveFill = white ? '#ffffff' : `url(#${gid})`
 
   return (
@@ -57,9 +57,9 @@ export function AIMark({ size = 20, thinking, breathe, variant = 'color', classN
     >
       <defs>
         <linearGradient id={gid} x1="6" y1="6" x2="42" y2="42" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#6366f1" />
-          <stop offset="0.55" stopColor="#8b5cf6" />
-          <stop offset="1" stopColor="#06b6d4" />
+          <stop offset="0" stopColor="#c9a96e" />
+          <stop offset="0.55" stopColor="#AB9055" />
+          <stop offset="1" stopColor="#907240" />
         </linearGradient>
         <clipPath id={cid}>
           <circle cx="24" cy="24" r="15.5" />
