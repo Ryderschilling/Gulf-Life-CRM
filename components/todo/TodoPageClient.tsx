@@ -8,12 +8,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Sun, RefreshCw, Plus, CheckSquare, Mail, CalendarClock, Send, X,
-  ChevronDown, ChevronUp, Copy, Sparkles, ArrowRight, Archive
+  ChevronDown, ChevronUp, Copy, ArrowRight, Archive
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { Todo, EmailDraft, Lead, DailyDigest, PriorityLead } from '@/lib/types'
 import { STATUS_CONFIG, formatPhone, timeAgo, cn } from '@/lib/utils'
-import { Card, CardHeader, Button, Pill, Avatar, Input, Spinner, EmptyState, Textarea } from '@/components/ui/kit'
+import { Card, CardHeader, Button, Pill, Avatar, Input, EmptyState, Textarea } from '@/components/ui/kit'
+import { AIMark, AIThinking, AIBadge } from '@/components/ai/AIMark'
 
 interface Props {
   todos: Todo[]
@@ -86,38 +87,39 @@ function DigestCard({ initialDigest }: { initialDigest: DailyDigest | null }) {
   const content = digest?.content
 
   return (
-    <Card>
-      <CardHeader
-        title="Today's Briefing"
-        subtitle="AI reads the whole pipeline and tells you where to focus"
-        right={
-          <Button size="sm" variant="secondary" onClick={() => generate(!!digest)} loading={loading}>
-            {digest ? <><RefreshCw size={13} /> Refresh</> : <><Sun size={14} /> Generate</>}
-          </Button>
-        }
-      />
+    <Card className="ai-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5 pb-4">
+        <div className="flex items-center gap-3">
+          <AIMark size={36} thinking={loading} />
+          <div>
+            <h2 className="text-[16px] font-semibold text-ink m-0">Today&apos;s Briefing</h2>
+            <p className="text-[13px] text-ink-2 mt-0.5 m-0">Gulf AI reads the whole pipeline and tells you where to focus</p>
+          </div>
+        </div>
+        <Button size="sm" variant="secondary" onClick={() => generate(!!digest)} loading={loading}>
+          {digest ? <><RefreshCw size={13} /> Refresh</> : <><Sun size={14} /> Generate</>}
+        </Button>
+      </div>
 
       {!content && !loading && (
         <div className="px-6 pb-6">
           <div className="bg-accent-soft/50 border border-accent/15 rounded-xl px-5 py-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-accent text-white flex items-center justify-center shrink-0">
-              <Sun size={17} />
-            </div>
+            <AIMark size={34} breathe />
             <p className="text-[13.5px] text-ink-2 m-0">
-              Hit <strong className="text-ink">Generate</strong> and the AI builds your morning game plan — who to contact, why, and what to say.
+              Hit <strong className="text-ink">Generate</strong> and Gulf AI builds your morning game plan — who to contact, why, and what to say.
             </p>
           </div>
         </div>
       )}
 
       {loading && !content && (
-        <div className="px-6 pb-8 flex items-center gap-3">
-          <Spinner /> <span className="text-[13.5px] text-ink-2">Reading the pipeline…</span>
+        <div className="px-6 pb-8">
+          <AIThinking label="Reading your pipeline…" />
         </div>
       )}
 
       {content && (
-        <div className="px-6 pb-6">
+        <div className="px-6 pb-6 ai-msg-in">
           <p className="text-[14.5px] font-semibold text-ink m-0">{content.greeting}</p>
           {content.summary && <p className="text-[13.5px] text-ink-2 mt-1 m-0">{content.summary}</p>}
 
@@ -211,8 +213,8 @@ function PriorityLeadRow({ pl, expanded, onToggle }: { pl: PriorityLead; expande
           <div className="flex flex-wrap gap-2 mt-3">
             <Button size="sm" variant="secondary" onClick={copyMessage}><Copy size={13} /> Copy</Button>
             {pl.lead_email && (
-              <Button size="sm" variant="secondary" onClick={draftIt} loading={drafting}>
-                <Sparkles size={13} /> AI email draft
+              <Button size="sm" className="ai-btn" onClick={draftIt} loading={drafting}>
+                <AIMark size={14} variant="white" thinking={drafting} /> AI email draft
               </Button>
             )}
             <Link href={`/crm/leads/${pl.lead_id}`} className="no-underline">
@@ -345,7 +347,7 @@ function TodoRow({ todo, onToggle }: { todo: Todo; onToggle: () => void }) {
               {todo.lead.name}
             </Link>
           )}
-          {todo.type === 'ai_created' && <span className="text-[11px] text-grape font-semibold">✦ AI</span>}
+          {todo.type === 'ai_created' && <AIBadge />}
         </div>
       </div>
     </div>
@@ -359,7 +361,7 @@ function TodoRow({ todo, onToggle }: { todo: Todo; onToggle: () => void }) {
 function DraftsCard({ drafts }: { drafts: EmailDraft[] }) {
   return (
     <Card>
-      <CardHeader title="Email drafts to review" subtitle="AI wrote these — edit, then send or dismiss" />
+      <CardHeader title="Email drafts to review" subtitle="Gulf AI wrote these — edit, then send or dismiss" />
       <div className="px-6 pb-5 flex flex-col gap-3">
         {drafts.length === 0 && (
           <EmptyState

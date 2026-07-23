@@ -7,7 +7,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Send, Plus, Trash2, MessageSquare, BookOpen, Brain, Pencil, X, Check } from 'lucide-react'
+import { Send, Plus, Trash2, MessageSquare, BookOpen, Brain, Pencil, X, Check } from 'lucide-react'
+import { AIMark, AIThinking } from '@/components/ai/AIMark'
 import toast from 'react-hot-toast'
 import type { AIChatMessage, AIContextFile, AIMemory } from '@/lib/types'
 import { cn, timeAgo } from '@/lib/utils'
@@ -29,7 +30,7 @@ export default function AIPageClient() {
   return (
     <div className="flex flex-col h-[calc(100vh-120px)] min-h-[480px]">
       <PageHeader
-        title="AI Assistant"
+        title="Gulf AI"
         subtitle="It knows your whole CRM — and it can take action"
         right={
           <Segmented<Tab>
@@ -177,19 +178,18 @@ function ChatTab() {
             <div className="flex justify-center pt-10"><Spinner /></div>
           ) : messages.length === 0 ? (
             <div className="max-w-md mx-auto pt-8">
-              <div className="w-12 h-12 rounded-2xl bg-accent-soft text-accent flex items-center justify-center mb-4 mx-auto">
-                <Sparkles size={22} />
-              </div>
+              <div className="flex justify-center mb-4"><AIMark size={56} breathe /></div>
               <p className="text-[15px] font-semibold text-ink text-center m-0 mb-1">What do you need?</p>
               <p className="text-[13px] text-ink-2 text-center m-0 mb-5">
                 Ask questions about your pipeline, or tell me to do things — I can create leads, move stages, add notes and to-dos, draft emails, and send texts (with your OK).
               </p>
               <div className="flex flex-col gap-2">
-                {STARTERS.map(s => (
+                {STARTERS.map((s, i) => (
                   <button
                     key={s}
                     onClick={() => send(s)}
-                    className="text-left text-[13px] text-ink-2 bg-[#f7f8fb] hover:bg-accent-soft hover:text-accent border border-line rounded-xl px-4 py-2.5 transition-colors"
+                    style={{ animationDelay: `${120 + i * 70}ms` }}
+                    className="ai-rise ai-suggest text-left text-[13px] text-ink-2 bg-[#f7f8fb] border border-line rounded-xl px-4 py-2.5"
                   >
                     {s}
                   </button>
@@ -199,13 +199,7 @@ function ChatTab() {
           ) : (
             <div className="max-w-2xl mx-auto">
               {messages.map((m, i) => <MessageBubble key={i} message={m} />)}
-              {busy && (
-                <div className="flex items-center gap-1.5 px-3 py-2">
-                  <span className="typing-dot w-1.5 h-1.5 bg-accent rounded-full inline-block" />
-                  <span className="typing-dot w-1.5 h-1.5 bg-accent rounded-full inline-block" />
-                  <span className="typing-dot w-1.5 h-1.5 bg-accent rounded-full inline-block" />
-                </div>
-              )}
+              {busy && <AIThinking />}
             </div>
           )}
         </div>
@@ -223,7 +217,7 @@ function ChatTab() {
             <button
               onClick={() => send()}
               disabled={busy || !input.trim()}
-              className="w-[44px] h-[44px] rounded-xl bg-accent text-white flex items-center justify-center disabled:opacity-40 hover:bg-accent-dark transition-colors shrink-0"
+              className="ai-btn w-[44px] h-[44px] rounded-xl flex items-center justify-center disabled:opacity-40 shrink-0"
             >
               <Send size={17} />
             </button>

@@ -9,7 +9,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { MessageSquare, Mail, Send, Search, Inbox as InboxIcon, ExternalLink, Sparkles, MoreHorizontal, Trash2, CheckCheck, Circle } from 'lucide-react'
+import { MessageSquare, Mail, Send, Search, Inbox as InboxIcon, ExternalLink, MoreHorizontal, Trash2, CheckCheck, Circle } from 'lucide-react'
+import { AIMark } from '@/components/ai/AIMark'
 import { Card, Button, Input, Textarea, PageHeader, Avatar, EmptyState, Segmented, Pill, Spinner, Modal } from '@/components/ui/kit'
 import { createClient } from '@/lib/supabase/client'
 import { cn, timeAgo, formatPhone } from '@/lib/utils'
@@ -457,10 +458,10 @@ function Thread({ convo, onSent }: { convo: Convo; onSent: () => void }) {
             <button
               onClick={aiDraft}
               disabled={drafting || sending}
-              className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12.5px] font-semibold border border-accent/30 bg-accent-soft text-accent transition-colors hover:bg-accent hover:text-white disabled:opacity-60 disabled:hover:bg-accent-soft disabled:hover:text-accent"
-              title="AI reads the whole conversation and this lead's profile, then drafts a reply for you to edit"
+              className="ai-btn ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12.5px] font-semibold disabled:opacity-60"
+              title="Gulf AI reads the whole conversation and this lead's profile, then drafts a reply for you to edit"
             >
-              {drafting ? <Spinner size={13} /> : <Sparkles size={13} />} {drafting ? 'Drafting…' : 'AI draft'}
+              <AIMark size={14} variant="white" thinking={drafting} /> {drafting ? 'Drafting…' : 'AI draft'}
             </button>
           )}
         </div>

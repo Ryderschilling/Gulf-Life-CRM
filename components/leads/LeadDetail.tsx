@@ -7,9 +7,10 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Mail, MessageSquare, Phone, CalendarClock, RefreshCw, Sparkles,
+  ArrowLeft, Mail, MessageSquare, Phone, CalendarClock, RefreshCw,
   StickyNote, ArrowRightLeft, Upload, Home, Plus, Trash2, CircleCheck, PenLine, Zap
 } from 'lucide-react'
+import { AIMark } from '@/components/ai/AIMark'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
 import type { Lead, LeadActivity, LeadAddress, LeadNote, LeadStatus, SmsMessage, EmailDraft } from '@/lib/types'
@@ -193,8 +194,8 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
 
         {/* Quick actions */}
         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-line">
-          <Button size="sm" variant="secondary" onClick={draftEmail} loading={drafting} disabled={!lead.email}>
-            <Sparkles size={14} /> AI Email Draft
+          <Button size="sm" className="ai-btn" onClick={draftEmail} loading={drafting} disabled={!lead.email}>
+            <AIMark size={14} variant="white" thinking={drafting} /> AI Email Draft
           </Button>
           <Button size="sm" variant="secondary" onClick={() => setSmsOpen(true)} disabled={!lead.phone}>
             <MessageSquare size={14} /> Text
@@ -219,7 +220,7 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
           {/* Pending drafts */}
           {pendingDrafts.length > 0 && (
             <Card>
-              <CardHeader title="Drafts waiting for review" subtitle="AI wrote these — edit and send from To-Do" />
+              <CardHeader title="Drafts waiting for review" subtitle="Gulf AI wrote these — edit and send from To-Do" />
               <div className="px-6 pb-5 flex flex-col gap-2">
                 {pendingDrafts.map(d => (
                   <Link key={d.id} href="/crm/todo" className="no-underline">
@@ -411,7 +412,7 @@ const ACTIVITY_ICON: Record<string, { icon: React.ReactNode; cls: string }> = {
   sms_received: { icon: <MessageSquare size={13} />, cls: 'bg-good-soft text-good' },
   call: { icon: <Phone size={13} />, cls: 'bg-grape-soft text-grape' },
   status_change: { icon: <ArrowRightLeft size={13} />, cls: 'bg-accent-soft text-accent' },
-  ai_draft: { icon: <Sparkles size={13} />, cls: 'bg-grape-soft text-grape' },
+  ai_draft: { icon: <AIMark size={13} />, cls: 'bg-grape-soft text-grape' },
   ai_action: { icon: <Zap size={13} />, cls: 'bg-grape-soft text-grape' },
   created: { icon: <CircleCheck size={13} />, cls: 'bg-good-soft text-good' },
   imported: { icon: <Upload size={13} />, cls: 'bg-accent-soft text-accent' },
