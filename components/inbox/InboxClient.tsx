@@ -9,8 +9,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { MessageSquare, Mail, Send, Search, Inbox as InboxIcon, ExternalLink, Sparkles } from 'lucide-react'
-import { Card, Button, Input, Textarea, PageHeader, Avatar, EmptyState, Segmented, Pill, Spinner } from '@/components/ui/kit'
+import { MessageSquare, Mail, Send, Search, Inbox as InboxIcon, ExternalLink, Sparkles, MoreHorizontal, Trash2, CheckCheck, Circle } from 'lucide-react'
+import { Card, Button, Input, Textarea, PageHeader, Avatar, EmptyState, Segmented, Pill, Spinner, Modal } from '@/components/ui/kit'
+import { createClient } from '@/lib/supabase/client'
 import { cn, timeAgo, formatPhone } from '@/lib/utils'
 
 // Channel colors — texts are indigo (brand accent), emails are teal.
@@ -78,6 +79,39 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
     (c: Convo) => c.items.some(i => i.dir === 'in' && i.at > (reads[c.leadId] ?? '')),
     [reads],
   )
+  const markUnread = useCallback((leadId: string) => {
+    setReads(prev => {
+      const next = { ...prev }
+      delete next[leadId]
+      try { localStorage.setItem('glc_inbox_reads', JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }, [])
+
+  // ⋯ menu + delete-conversation confirm
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [deleteFor, setDeleteFor] = useState<Convo | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  async function deleteConversation() {
+    if (!deleteFor || deleting) return
+    setDeleting(true)
+    try {
+      const supabase = createClient()
+      // Remove the messages themselves; the lead + its timeline stay intact
+      const { error: e1 } = await supabase.from('sms_messages').delete().eq('lead_id', deleteFor.leadId)
+      const { error: e2 } = await supabase.from('lead_activities').delete().eq('lead_id', deleteFor.leadId).in('type', ['email_sent', 'email_received'])
+      if (e1 || e2) throw new Error((e1 ?? e2)!.message)
+      if (activeId === deleteFor.leadId) setActiveId(null)
+      toast.success('Conversation deleted')
+      setDeleteFor(null)
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const convos = useMemo(() => {
     const map = new Map<string, Convo>()
@@ -181,11 +215,15 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
             <div className="flex-1 overflow-y-auto">
               {filtered.map(c => {
                 const isActive = active?.leadId === c.leadId
+                const unread = isUnread(c)
                 return (
-                  <button
+                  <div
                     key={c.leadId}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setActiveId(c.leadId)}
-                    className={cn('w-full text-left px-3.5 py-3 border-b border-line flex items-start gap-3 transition-colors', isActive ? 'bg-accent-soft' : 'hover:bg-[#f7f8fb]')}
+                    onKeyDown={e => { if (e.key === 'Enter') setActiveId(c.leadId) }}
+                    className={cn('group w-full text-left px-3.5 py-3 border-b border-line flex items-start gap-3 transition-colors cursor-pointer', isActive ? 'bg-accent-soft' : 'hover:bg-[#f7f8fb]')}
                   >
                     <Avatar name={c.name} />
                     <div className="min-w-0 flex-1">
@@ -204,8 +242,44 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
                         </p>
                       </div>
                     </div>
-                    {isUnread(c) && <span className="w-2 h-2 rounded-full bg-accent shrink-0 mt-1.5" title="Unread" />}
-                  </button>
+                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                      {unread && <span className="w-2 h-2 rounded-full bg-accent" title="Unread" />}
+                      <div className="relative" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => setMenuFor(menuFor === c.leadId ? null : c.leadId)}
+                          title="Conversation options"
+                          className={cn('w-6 h-6 rounded-md flex items-center justify-center text-ink-3 hover:bg-[#e9ebf2] hover:text-ink transition-all',
+                            menuFor === c.leadId ? 'opacity-100 bg-[#e9ebf2]' : 'opacity-0 group-hover:opacity-100 focus:opacity-100')}
+                        >
+                          <MoreHorizontal size={15} />
+                        </button>
+                        {menuFor === c.leadId && (
+                          <>
+                            <div className="fixed inset-0 z-[110]" onClick={() => setMenuFor(null)} />
+                            <div className="absolute right-0 top-7 z-[120] w-[190px] bg-card border border-line rounded-xl shadow-lg py-1 overflow-hidden">
+                              <MenuItem
+                                icon={unread ? <CheckCheck size={14} /> : <Circle size={12} />}
+                                label={unread ? 'Mark as read' : 'Mark as unread'}
+                                onClick={() => { if (unread) markRead(c.leadId); else markUnread(c.leadId); setMenuFor(null) }}
+                              />
+                              <MenuItem
+                                icon={<ExternalLink size={14} />}
+                                label="Open lead"
+                                onClick={() => { setMenuFor(null); router.push(`/crm/leads/${c.leadId}`) }}
+                              />
+                              <div className="border-t border-line my-1" />
+                              <MenuItem
+                                danger
+                                icon={<Trash2 size={14} />}
+                                label="Delete conversation"
+                                onClick={() => { setMenuFor(null); setDeleteFor(c) }}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )
               })}
               {filtered.length === 0 && <p className="text-[12.5px] text-ink-3 text-center pt-8">Nothing matches</p>}
@@ -222,7 +296,36 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
           )}
         </div>
       )}
+
+      {/* Delete conversation confirm */}
+      <Modal open={!!deleteFor} onClose={() => !deleting && setDeleteFor(null)} title="Delete this conversation?">
+        <div className="flex flex-col gap-3">
+          <p className="text-[13.5px] text-ink-2 m-0 leading-relaxed">
+            This removes all {deleteFor?.items.length ?? 0} message{(deleteFor?.items.length ?? 0) === 1 ? '' : 's'} with{' '}
+            <strong className="text-ink">{deleteFor?.name}</strong> from the inbox. The lead and their timeline notes stay —
+            only the messages are deleted. This can&rsquo;t be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDeleteFor(null)} disabled={deleting}>Cancel</Button>
+            <Button variant="danger" onClick={deleteConversation} loading={deleting}>
+              <Trash2 size={14} /> Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
+  )
+}
+
+function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn('w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] font-medium text-left transition-colors',
+        danger ? 'text-bad hover:bg-[#fef2f2]' : 'text-ink-2 hover:bg-[#f5f6fa] hover:text-ink')}
+    >
+      {icon} {label}
+    </button>
   )
 }
 
