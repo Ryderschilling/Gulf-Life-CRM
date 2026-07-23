@@ -13,7 +13,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import {
   mailchimpConfigured, getMailchimpAudienceInfo, listMailchimpTags,
-  listMailchimpCampaigns, sendMailchimpCampaign,
+  listMailchimpCampaigns, sendMailchimpCampaign, getOwnerLeadTagId,
+  OWNER_LEAD_TAG, type CampaignAudience,
 } from '@/lib/mailchimp'
 
 export const dynamic = 'force-dynamic'
@@ -101,10 +102,14 @@ export async function GET() {
     listMailchimpCampaigns(),
   ])
 
+  const ownerTag = (tags.tags ?? []).find(t => t.name === OWNER_LEAD_TAG) ?? null
+
   return NextResponse.json({
     configured: true,
     audience: audience.ok ? { name: audience.name, memberCount: audience.memberCount ?? 0 } : null,
-    tags: tags.tags ?? [],
+    // CRM-synced contacts (drives the "CRM homeowner leads" / "Mailchimp-only" filters)
+    ownerTag: ownerTag ? { id: ownerTag.id, memberCount: ownerTag.memberCount } : null,
+    tags: (tags.tags ?? []).filter(t => t.name !== OWNER_LEAD_TAG),
     campaigns: campaigns.campaigns ?? [],
     error: audience.ok ? undefined : audience.error,
   })
@@ -124,6 +129,8 @@ export async function POST(req: NextRequest) {
       subject?: string
       preview_text?: string
       body?: string
+      /** 'all' = whole audience · 'crm' = Owner Lead tag · 'mailchimp_only' = NOT Owner Lead · 'tag' = tag_id */
+      audience?: 'all' | 'crm' | 'mailchimp_only' | 'tag'
       tag_id?: number
       mode?: 'send' | 'test'
       test_email?: string
@@ -140,11 +147,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'A test email address is required' }, { status: 400 })
     }
 
+    let audience: CampaignAudience = { type: 'all' }
+    if (payload.audience === 'tag') {
+      if (!payload.tag_id) return NextResponse.json({ error: 'tag_id is required for a tag audience' }, { status: 400 })
+      audience = { type: 'tag', tagId: payload.tag_id }
+    } else if (payload.audience === 'crm' || payload.audience === 'mailchimp_only') {
+      const ownerId = await getOwnerLeadTagId()
+      if (!ownerId) return NextResponse.json({ error: `Could not find or create the "${OWNER_LEAD_TAG}" tag in Mailchimp` }, { status: 502 })
+      audience = payload.audience === 'crm' ? { type: 'tag', tagId: ownerId } : { type: 'not_tag', tagId: ownerId }
+    }
+
     const result = await sendMailchimpCampaign({
       subject,
       previewText: payload.preview_text?.trim() || undefined,
       html: buildHtml(body),
-      tagId: payload.tag_id || undefined,
+      audience,
       testEmail: mode === 'test' ? payload.test_email!.trim() : undefined,
     })
 

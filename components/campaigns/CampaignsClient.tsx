@@ -28,6 +28,7 @@ interface Report {
 interface Data {
   configured: boolean
   audience: { name: string; memberCount: number } | null
+  ownerTag: { id: number; memberCount: number } | null
   tags: Tag[]
   campaigns: Campaign[]
   error?: string
@@ -59,7 +60,7 @@ export default function CampaignsClient({ userEmail }: { userEmail: string }) {
 
   const [subject, setSubject] = useState('')
   const [preview, setPreview] = useState('')
-  const [tagId, setTagId] = useState('')
+  const [audienceSel, setAudienceSel] = useState('all') // 'all' | 'crm' | 'mconly' | 'tag:<id>'
   const [body, setBody] = useState('')
   const [testEmail, setTestEmail] = useState(userEmail)
   const [sending, setSending] = useState<'test' | 'send' | null>(null)
@@ -87,8 +88,19 @@ export default function CampaignsClient({ userEmail }: { userEmail: string }) {
       .catch(() => setReports(prev => ({ ...prev, [c.id]: { error: 'Could not load stats' } })))
   }, [reports])
 
-  const selectedTag = data?.tags.find(t => String(t.id) === tagId)
-  const recipientCount = selectedTag ? selectedTag.memberCount : (data?.audience?.memberCount ?? 0)
+  const totalCount = data?.audience?.memberCount ?? 0
+  const crmCount = data?.ownerTag?.memberCount ?? 0
+  const selectedTag = audienceSel.startsWith('tag:') ? data?.tags.find(t => `tag:${t.id}` === audienceSel) : undefined
+  const recipientCount =
+    audienceSel === 'crm' ? crmCount
+    : audienceSel === 'mconly' ? Math.max(0, totalCount - crmCount)
+    : selectedTag ? selectedTag.memberCount
+    : totalCount
+  const audienceLabel =
+    audienceSel === 'crm' ? 'CRM homeowner leads'
+    : audienceSel === 'mconly' ? 'Mailchimp-only contacts (not from the CRM)'
+    : selectedTag ? `tag: ${selectedTag.name}`
+    : 'everyone in Mailchimp'
   const ready = subject.trim().length > 0 && body.trim().length > 0
 
   async function submit(mode: 'test' | 'send') {
@@ -103,7 +115,8 @@ export default function CampaignsClient({ userEmail }: { userEmail: string }) {
           subject: subject.trim(),
           preview_text: preview.trim() || undefined,
           body: body.trim(),
-          tag_id: tagId ? Number(tagId) : undefined,
+          audience: audienceSel === 'crm' ? 'crm' : audienceSel === 'mconly' ? 'mailchimp_only' : selectedTag ? 'tag' : 'all',
+          tag_id: selectedTag?.id,
           mode,
           test_email: mode === 'test' ? testEmail.trim() : undefined,
         }),
@@ -114,7 +127,7 @@ export default function CampaignsClient({ userEmail }: { userEmail: string }) {
         toast.success(`Test sent to ${testEmail.trim()}`)
       } else {
         toast.success(`Campaign sent to ${recipientCount} ${recipientCount === 1 ? 'person' : 'people'}`)
-        setSubject(''); setPreview(''); setBody(''); setTagId('')
+        setSubject(''); setPreview(''); setBody(''); setAudienceSel('all')
         setConfirmOpen(false)
         load()
       }
@@ -172,12 +185,18 @@ export default function CampaignsClient({ userEmail }: { userEmail: string }) {
         />
         <div className="flex flex-col gap-3.5 p-5 pt-1">
           <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="Send to">
-              <Select value={tagId} onChange={e => setTagId(e.target.value)}>
-                <option value="">Everyone ({data.audience?.memberCount ?? 0})</option>
-                {data.tags.map(t => (
-                  <option key={t.id} value={t.id}>{t.name} ({t.memberCount})</option>
-                ))}
+            <Field label="Send to" hint="CRM leads are tagged in Mailchimp automatically when they sync — pipeline-stage tags show up here too">
+              <Select value={audienceSel} onChange={e => setAudienceSel(e.target.value)}>
+                <option value="all">Everyone in Mailchimp ({totalCount})</option>
+                <option value="crm">CRM homeowner leads ({crmCount})</option>
+                <option value="mconly">Mailchimp-only — not from the CRM ({Math.max(0, totalCount - crmCount)})</option>
+                {data.tags.length > 0 && (
+                  <optgroup label="Tags">
+                    {data.tags.map(t => (
+                      <option key={t.id} value={`tag:${t.id}`}>{t.name} ({t.memberCount})</option>
+                    ))}
+                  </optgroup>
+                )}
               </Select>
             </Field>
             <Field label="Preview text" hint="The grey teaser line shown next to the subject — optional">
@@ -328,7 +347,7 @@ export default function CampaignsClient({ userEmail }: { userEmail: string }) {
           <p className="text-[13.5px] text-ink-2 m-0 leading-relaxed">
             <strong className="text-ink">&ldquo;{subject.trim()}&rdquo;</strong> will go to{' '}
             <strong className="text-ink">{recipientCount} {recipientCount === 1 ? 'person' : 'people'}</strong>
-            {selectedTag ? <> (tag: {selectedTag.name})</> : <> (your whole audience)</>} from Gulf Life Concierge.
+            {' '}({audienceLabel}) from Gulf Life Concierge.
             This can&rsquo;t be undone — consider a test send first.
           </p>
           <div className="flex justify-end gap-2">

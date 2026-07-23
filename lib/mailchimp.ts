@@ -257,17 +257,55 @@ export async function getMailchimpCampaignReport(campaignId: string): Promise<{ 
   }
 }
 
+/** Who a campaign goes to:
+ *  all      → the whole Mailchimp audience
+ *  tag      → only members with this tag (static segment)
+ *  not_tag  → members WITHOUT this tag (e.g. "Mailchimp-only" = not_tag Owner Lead) */
+export type CampaignAudience =
+  | { type: 'all' }
+  | { type: 'tag'; tagId: number }
+  | { type: 'not_tag'; tagId: number }
+
+export const OWNER_LEAD_TAG = 'Owner Lead' // applied to every CRM lead on sync
+
+/** Find (or create) the Owner Lead tag that marks CRM-synced contacts. */
+export async function getOwnerLeadTagId(): Promise<number | null> {
+  const tags = await listMailchimpTags()
+  const hit = tags.tags?.find(t => t.name === OWNER_LEAD_TAG)
+  if (hit) return hit.id
+  const created = await mc(`/lists/${process.env.MAILCHIMP_AUDIENCE_ID}/segments`, {
+    method: 'POST',
+    body: JSON.stringify({ name: OWNER_LEAD_TAG, static_segment: [] }),
+  })
+  return created.ok ? ((created.data as { id?: number })?.id ?? null) : null
+}
+
+function recipientsFor(listId: string, audience: CampaignAudience): Record<string, unknown> {
+  if (audience.type === 'tag') {
+    return { list_id: listId, segment_opts: { saved_segment_id: audience.tagId } }
+  }
+  if (audience.type === 'not_tag') {
+    return {
+      list_id: listId,
+      segment_opts: {
+        match: 'all',
+        conditions: [{ condition_type: 'StaticSegment', field: 'static_segment', op: 'static_not', value: audience.tagId }],
+      },
+    }
+  }
+  return { list_id: listId }
+}
+
 export interface SendCampaignInput {
   subject: string
   previewText?: string
   html: string
-  /** Mailchimp static-segment (tag) id — omit to send to the whole audience */
-  tagId?: number
+  audience: CampaignAudience
   /** When set, only a test email is sent to this address; the campaign stays a draft in Mailchimp */
   testEmail?: string
 }
 
-/** Create a campaign (whole audience or one tag), set content, then send (or test-send). */
+/** Create a campaign for the chosen audience, set content, then send (or test-send). */
 export async function sendMailchimpCampaign(input: SendCampaignInput): Promise<{ ok: boolean; campaignId?: string; error?: string }> {
   if (!mailchimpConfigured()) return { ok: false, error: 'Mailchimp is not configured' }
   const listId = process.env.MAILCHIMP_AUDIENCE_ID!
@@ -280,10 +318,7 @@ export async function sendMailchimpCampaign(input: SendCampaignInput): Promise<{
       method: 'POST',
       body: JSON.stringify({
         type: 'regular',
-        recipients: {
-          list_id: listId,
-          ...(input.tagId ? { segment_opts: { saved_segment_id: input.tagId } } : {}),
-        },
+        recipients: recipientsFor(listId, input.audience),
         settings: {
           subject_line: input.subject,
           preview_text: input.previewText ?? '',
