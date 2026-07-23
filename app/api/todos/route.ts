@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
       archived_at: null,
       sort_order: body.sort_order ?? 0,
       created_by: user.id,
+      // Only include when provided — the column arrives with migration 003
+      ...(body.assigned_to !== undefined ? { assigned_to: body.assigned_to } : {}),
     }
 
     const { data, error } = await supabase

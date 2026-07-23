@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Card, CardHeader, PageHeader, Field, Input, Button, Spinner, Avatar } from '@/components/ui/kit'
+import TeamCard from '@/components/settings/TeamCard'
 
 interface IntegrationStatus {
   configured: boolean
@@ -34,17 +35,18 @@ const INTEGRATIONS: { key: keyof StatusMap; name: string; what: string; icon: Re
   { key: 'mailchimp', name: 'Mailchimp', what: 'Syncs homeowner leads into the campaign audience', icon: <Megaphone size={17} />, env: 'MAILCHIMP_API_KEY + MAILCHIMP_AUDIENCE_ID' },
 ]
 
-export default function SettingsClient({ email, profile }: { email: string; profile: Profile | null }) {
+export default function SettingsClient({ email, profile, isAdmin = false }: { email: string; profile: Profile | null; isAdmin?: boolean }) {
   const [status, setStatus] = useState<StatusMap | null>(null)
   const [name, setName] = useState(profile?.full_name ?? '')
   const [savingName, setSavingName] = useState(false)
 
   useEffect(() => {
+    if (!isAdmin) return // integrations are admin-only
     fetch('/api/integrations/status')
       .then(r => r.json())
       .then(data => { if (!data.error) setStatus(data) })
       .catch(() => {})
-  }, [])
+  }, [isAdmin])
 
   async function saveName() {
     if (!profile) { toast.error('Profile not loaded yet'); return }
@@ -78,11 +80,24 @@ export default function SettingsClient({ email, profile }: { email: string; prof
             <Button size="sm" onClick={saveName} loading={savingName} className="self-start">
               <User size={14} /> Save
             </Button>
+            <p className="text-[12px] text-ink-3 m-0">
+              Passwords are managed by an admin in the Team section — ask John or Ryder if you need yours changed.
+            </p>
           </div>
         </Card>
 
-        {/* Integrations */}
-        <Card className="lg:col-span-2">
+        {/* Team management — admins only, top row next to Profile */}
+        {isAdmin && profile && (
+          <div className="lg:col-span-2">
+            <TeamCard meId={profile.id} />
+          </div>
+        )}
+      </div>
+
+      {/* Integrations — admins only, bottom */}
+      {isAdmin && (
+      <div className="mt-4">
+        <Card>
           <CardHeader
             title="Integrations"
             subtitle="Keys are set as environment variables on the server — paste them in Vercel, then redeploy"
@@ -126,6 +141,8 @@ export default function SettingsClient({ email, profile }: { email: string; prof
           </div>
         </Card>
       </div>
+      )}
+
     </div>
   )
 }

@@ -25,7 +25,13 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email: emailToUse, password })
 
     if (error) {
-      setError('Wrong username or password')
+      // Be honest about WHY it failed — a rate limit or network problem
+      // is not the same as a wrong password.
+      const msg = error.message.toLowerCase()
+      if (msg.includes('invalid login credentials')) setError('Wrong username or password')
+      else if (msg.includes('rate limit') || msg.includes('security purposes')) setError('Too many attempts — wait a minute, then try again')
+      else if (msg.includes('banned')) setError('This account has been deactivated')
+      else setError(`Sign-in problem: ${error.message}`)
       setLoading(false)
       return
     }

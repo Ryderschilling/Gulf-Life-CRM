@@ -22,6 +22,8 @@ interface Props {
 
 // Pipeline + Analytics are sales-funnel tools — hidden when viewing Clients.
 const PROSPECT_ONLY = ['/crm/pipeline', '/crm/analytics']
+// Mass sends + bulk imports are admin territory — hidden for members.
+const ADMIN_ONLY = ['/crm/campaigns', '/crm/import']
 
 const NAV = [
   { href: '/crm', label: 'Overview', icon: LayoutDashboard },
@@ -54,7 +56,11 @@ export default function Sidebar({ profile, pendingTodoCount = 0, segment = 'pros
     return () => { cancelled = true }
   }, [pathname])
 
-  const visibleNav = NAV.filter(item => !(segment === 'client' && PROSPECT_ONLY.includes(item.href)))
+  const isAdmin = profile?.role === 'owner'
+  const visibleNav = NAV.filter(item =>
+    !(segment === 'client' && PROSPECT_ONLY.includes(item.href)) &&
+    !(!isAdmin && ADMIN_ONLY.includes(item.href))
+  )
 
   function switchSegment(next: Segment) {
     if (next === segment) return
@@ -153,7 +159,7 @@ export default function Sidebar({ profile, pendingTodoCount = 0, segment = 'pros
           <Avatar name={displayName} size={34} />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-semibold text-white m-0 truncate">{displayName}</p>
-            <p className="text-[11.5px] text-[#8e97b1] m-0 capitalize">{profile?.role === 'owner' ? 'Owner' : 'Team'}</p>
+            <p className="text-[11.5px] text-[#8e97b1] m-0 capitalize">{profile?.role === 'owner' ? 'Admin' : 'Team'}</p>
           </div>
           <button
             onClick={signOut}

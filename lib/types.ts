@@ -5,14 +5,32 @@
 // ----------------------------------------
 // AUTH / PROFILES
 // ----------------------------------------
+export type UserRole = 'owner' | 'sales_rep'
+
+/** UI labels for roles — DB keeps 'owner'/'sales_rep', people see Admin/Member. */
+export const ROLE_LABELS: Record<UserRole, string> = {
+  owner: 'Admin',
+  sales_rep: 'Member',
+}
+
 export interface Profile {
   id: string
   email?: string
   full_name: string | null
-  role: 'owner' | 'sales_rep'
+  role: UserRole
   avatar_url?: string | null
+  /** false = deactivated (kept for history, can't sign in). Missing pre-003. */
+  active?: boolean
+  /** true = admin set a temp password; user must change it on next login. */
+  must_change_password?: boolean
   created_at: string
   updated_at: string
+}
+
+/** Profile merged with auth info — returned by GET /api/team (admin only). */
+export interface TeamMember extends Profile {
+  email: string
+  last_sign_in_at: string | null
 }
 
 // ----------------------------------------
@@ -135,6 +153,7 @@ export type ActivityType =
   | 'created'
   | 'imported'
   | 'mailchimp_sync'
+  | 'assigned'
 
 export interface LeadActivity {
   id: string
@@ -274,6 +293,8 @@ export interface Todo {
   archived_at: string | null
   sort_order: number
   created_by: string | null
+  /** Who's responsible for this task. Missing pre-003. */
+  assigned_to?: string | null
   created_at: string
   updated_at: string
   lead?: Lead

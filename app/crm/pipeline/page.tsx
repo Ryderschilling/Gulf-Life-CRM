@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getSegment } from "@/lib/segment";
+import { getTeam } from "@/lib/auth";
 import type { Lead } from "@/lib/types";
 import PipelineBoard from "@/components/pipeline/PipelineBoard";
 
@@ -31,13 +32,17 @@ export default async function PipelinePage() {
     );
   }
 
-  const { data: leads } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("lead_type", "owner")
-    .eq("relationship", "prospect")
-    .order("updated_at", { ascending: false })
-    .limit(1000);
+  const [{ data: { user } }, { data: leads }, team] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase
+      .from("leads")
+      .select("*")
+      .eq("lead_type", "owner")
+      .eq("relationship", "prospect")
+      .order("updated_at", { ascending: false })
+      .limit(1000),
+    getTeam(),
+  ]);
 
-  return <PipelineBoard initialLeads={(leads ?? []) as Lead[]} />;
+  return <PipelineBoard initialLeads={(leads ?? []) as Lead[]} team={team} meId={user?.id ?? ""} />;
 }

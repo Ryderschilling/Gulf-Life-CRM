@@ -5,6 +5,7 @@ import AIDrawer from "@/components/ai/AIDrawer";
 import { Toaster } from "react-hot-toast";
 import { getSegment } from "@/lib/segment";
 import { countPendingTodoItems } from "@/lib/badge";
+import { DeactivatedScreen } from "@/components/auth/PasswordGate";
 import type { Profile } from "@/lib/types";
 
 export default async function CRMLayout({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,11 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
   const profileWithName: Profile | null = profile
     ? { ...profile, full_name: displayName }
     : null;
+
+  // Deactivated: the auth ban stops new sign-ins; this ends live sessions.
+  if (profileWithName?.active === false) {
+    return <DeactivatedScreen />;
+  }
 
   // Pending to-do badge: open todos + pending drafts + due follow-ups.
   // Shared with /api/todos/count (which the Sidebar refetches on navigation,

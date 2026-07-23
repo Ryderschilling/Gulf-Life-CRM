@@ -8,12 +8,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Mail, MessageSquare, Phone, CalendarClock, RefreshCw,
-  StickyNote, ArrowRightLeft, Upload, Home, Plus, Trash2, CircleCheck, PenLine, Zap
+  StickyNote, ArrowRightLeft, Upload, Home, Plus, Trash2, CircleCheck, PenLine, Zap, UserCheck
 } from 'lucide-react'
 import { AIMark } from '@/components/ai/AIMark'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
-import type { Lead, LeadActivity, LeadAddress, LeadNote, LeadStatus, SmsMessage, EmailDraft } from '@/lib/types'
+import type { Lead, LeadActivity, LeadAddress, LeadNote, LeadStatus, SmsMessage, EmailDraft, Profile } from '@/lib/types'
 import { LEAD_STATUS_LABELS } from '@/lib/types'
 import { STATUS_CONFIG, ORDERED_STATUSES, formatPhone, formatDate, formatDateTime, timeAgo, sourceLabel, leadDisplayName, isPhoneName, cn } from '@/lib/utils'
 import { localTimeToISO } from '@/lib/dates'
@@ -26,11 +26,22 @@ interface Props {
   addresses: LeadAddress[]
   smsMessages: SmsMessage[]
   pendingDrafts: EmailDraft[]
+  team?: Profile[]
+  meId?: string
 }
 
-export default function LeadDetail({ lead, activities, notes, addresses, smsMessages, pendingDrafts }: Props) {
+function memberFirstName(p: Profile | undefined): string {
+  const n = p?.full_name?.trim()
+  if (!n) return 'Someone'
+  return n.includes('@') ? n.split('@')[0] : n.split(' ')[0]
+}
+
+export default function LeadDetail({ lead, activities, notes, addresses, smsMessages, pendingDrafts, team = [], meId = '' }: Props) {
   const router = useRouter()
   const supabase = createClient()
+
+  // id → profile, for "who did what" on the timeline + assignment
+  const teamById = new Map(team.map(p => [p.id, p]))
 
   const [noteText, setNoteText] = useState('')
   const [savingNote, setSavingNote] = useState(false)
@@ -146,6 +157,21 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
     }
   }
 
+  async function changeAssignee(newId: string) {
+    const value = newId || null
+    if (value === (lead.assigned_to ?? null)) return
+    const { error } = await supabase.from('leads').update({ assigned_to: value }).eq('id', lead.id)
+    if (error) { toast.error('Failed to assign'); return }
+    const who = value ? memberFirstName(teamById.get(value)) : null
+    await supabase.from('lead_activities').insert({
+      lead_id: lead.id, user_id: meId || null, type: 'assigned',
+      body: who ? `Assigned to ${who}` : 'Unassigned',
+      metadata: { assigned_to: value },
+    })
+    toast.success(who ? `Assigned to ${who}` : 'Unassigned')
+    router.refresh()
+  }
+
   async function saveFollowUp() {
     // Store as 9am CRM-local on the chosen calendar day (lib/dates.ts)
     const value = followUpDate ? localTimeToISO(followUpDate) : null
@@ -197,13 +223,26 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] font-semibold text-ink-3 uppercase tracking-wide">Stage</span>
-            <Select value={lead.status} onChange={e => changeStage(e.target.value as LeadStatus)}>
-              {ORDERED_STATUSES.map(s => (
-                <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-              ))}
-            </Select>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-semibold text-ink-3 uppercase tracking-wide">Assigned</span>
+              <Select value={lead.assigned_to ?? ''} onChange={e => changeAssignee(e.target.value)}>
+                <option value="">Unassigned</option>
+                {team.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {memberFirstName(p)}{p.id === meId ? ' (me)' : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-semibold text-ink-3 uppercase tracking-wide">Stage</span>
+              <Select value={lead.status} onChange={e => changeStage(e.target.value as LeadStatus)}>
+                {ORDERED_STATUSES.map(s => (
+                  <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                ))}
+              </Select>
+            </div>
           </div>
         </div>
 
@@ -281,7 +320,7 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
               )}
               <div className="flex flex-col">
                 {timeline.map((a, i) => (
-                  <TimelineItem key={a.id} activity={a} isLast={i === timeline.length - 1} />
+                  <TimelineItem key={a.id} activity={a} isLast={i === timeline.length - 1} byName={a.user_id ? memberFirstName(teamById.get(a.user_id)) : undefined} />
                 ))}
               </div>
             </div>
@@ -328,7 +367,9 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
                 {notes.slice(0, 8).map(n => (
                   <div key={n.id} className="bg-warn-soft/50 border border-warn/10 rounded-lg px-3 py-2.5">
                     <p className="text-[12.5px] text-ink m-0 whitespace-pre-wrap">{n.body}</p>
-                    <p className="text-[11px] text-ink-3 m-0 mt-1">{timeAgo(n.created_at)}</p>
+                    <p className="text-[11px] text-ink-3 m-0 mt-1">
+                      {n.user_id && teamById.has(n.user_id) ? `${memberFirstName(teamById.get(n.user_id))} · ` : ''}{timeAgo(n.created_at)}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -432,9 +473,10 @@ const ACTIVITY_ICON: Record<string, { icon: React.ReactNode; cls: string }> = {
   created: { icon: <CircleCheck size={13} />, cls: 'bg-good-soft text-good' },
   imported: { icon: <Upload size={13} />, cls: 'bg-accent-soft text-accent' },
   mailchimp_sync: { icon: <RefreshCw size={13} />, cls: 'bg-warn-soft text-warn' },
+  assigned: { icon: <UserCheck size={13} />, cls: 'bg-accent-soft text-accent' },
 }
 
-function TimelineItem({ activity, isLast }: { activity: LeadActivity; isLast: boolean }) {
+function TimelineItem({ activity, isLast, byName }: { activity: LeadActivity; isLast: boolean; byName?: string }) {
   const cfg = ACTIVITY_ICON[activity.type] ?? ACTIVITY_ICON.note
   return (
     <div className="flex gap-3">
@@ -446,7 +488,9 @@ function TimelineItem({ activity, isLast }: { activity: LeadActivity; isLast: bo
       </div>
       <div className={cn('min-w-0 flex-1', !isLast && 'pb-4')}>
         <p className="text-[13.5px] text-ink m-0 whitespace-pre-wrap break-words">{activity.body}</p>
-        <p className="text-[11.5px] text-ink-3 m-0 mt-0.5">{formatDateTime(activity.created_at)}</p>
+        <p className="text-[11.5px] text-ink-3 m-0 mt-0.5">
+          {formatDateTime(activity.created_at)}{byName ? ` · ${byName}` : ''}
+        </p>
       </div>
     </div>
   )

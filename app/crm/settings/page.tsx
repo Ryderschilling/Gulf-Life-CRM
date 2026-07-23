@@ -14,5 +14,7 @@ export default async function SettingsPage() {
     .eq("id", user!.id)
     .single();
 
-  return <SettingsClient email={user?.email ?? ""} profile={profile} />;
+  const isAdmin = profile?.role === "owner";
+
+  return <SettingsClient email={user?.email ?? ""} profile={profile} isAdmin={isAdmin} />;
 }

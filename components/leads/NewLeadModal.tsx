@@ -42,6 +42,7 @@ export default function NewLeadModal({ open, onClose, relationship = 'prospect' 
         source: form.source,
         property_interest: form.property_interest.trim() || null,
         next_follow_up_at: form.next_follow_up_at ? localTimeToISO(form.next_follow_up_at) : null, // 9am CRM-local on the chosen day
+        assigned_to: user?.id ?? null, // whoever adds a lead owns it until reassigned
       }).select('id').single()
 
       if (error) throw error

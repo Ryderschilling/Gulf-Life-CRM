@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Users, CalendarClock, UserPlus, Trophy, Mail, Phone, Plus, Search, ChevronRight, ChevronLeft } from 'lucide-react'
-import type { Lead, LeadStatus } from '@/lib/types'
+import type { Lead, LeadStatus, Profile } from '@/lib/types'
 import type { Segment } from '@/lib/segment'
 import { STATUS_CONFIG, ORDERED_STATUSES, formatPhone, timeAgo, followUpState, isWonThisMonth, leadDisplayName, sourceLabel, cn } from '@/lib/utils'
 import { Card, StatCard, Pill, Button, Input, PageHeader, Th, Td, Avatar, EmptyState } from '@/components/ui/kit'
@@ -16,13 +16,23 @@ import NewLeadModal from '@/components/leads/NewLeadModal'
 
 const PAGE_SIZE = 25
 
-export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: Lead[]; segment?: Segment }) {
+type OwnerFilter = 'all' | 'mine' | 'unassigned'
+
+export default function LeadsOverview({ leads, segment = 'prospect', team = [], meId = '' }: { leads: Lead[]; segment?: Segment; team?: Profile[]; meId?: string }) {
   const router = useRouter()
   const isClient = segment === 'client'
   const [stageFilter, setStageFilter] = useState<LeadStatus | 'all'>('all')
+  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [showNewLead, setShowNewLead] = useState(false)
+
+  const teamById = useMemo(() => new Map(team.map(p => [p.id, p])), [team])
+  const assigneeName = (id: string | null) => {
+    const n = id ? teamById.get(id)?.full_name?.trim() : null
+    if (!n) return null
+    return n.includes('@') ? n.split('@')[0] : n.split(' ')[0]
+  }
 
   // ── Stats ──────────────────────────────────────────────────
   const active = leads.filter(l => !['closed_won', 'closed_lost'].includes(l.status))
@@ -48,6 +58,8 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
   const filtered = useMemo(() => {
     let list = sorted
     if (!isClient && stageFilter !== 'all') list = list.filter(l => l.status === stageFilter)
+    if (ownerFilter === 'mine') list = list.filter(l => l.assigned_to === meId)
+    if (ownerFilter === 'unassigned') list = list.filter(l => !l.assigned_to)
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(l =>
@@ -58,7 +70,7 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
       )
     }
     return list
-  }, [sorted, stageFilter, search, isClient])
+  }, [sorted, stageFilter, ownerFilter, meId, search, isClient])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -134,6 +146,21 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
           </div>
         )}
 
+        {/* Assignment filter chips — both modes */}
+        <div className="flex flex-wrap items-center gap-1.5 px-5 pb-4">
+          <FilterChip active={ownerFilter === 'all'} onClick={() => { setOwnerFilter('all'); setPage(1) }}>
+            Everyone
+          </FilterChip>
+          <FilterChip active={ownerFilter === 'mine'} onClick={() => { setOwnerFilter('mine'); setPage(1) }}>
+            My {isClient ? 'homeowners' : 'leads'}
+            <span className="text-ink-3 font-semibold">{leads.filter(l => l.assigned_to === meId).length}</span>
+          </FilterChip>
+          <FilterChip active={ownerFilter === 'unassigned'} onClick={() => { setOwnerFilter('unassigned'); setPage(1) }}>
+            Unassigned
+            <span className="text-ink-3 font-semibold">{leads.filter(l => !l.assigned_to).length}</span>
+          </FilterChip>
+        </div>
+
         {/* Table */}
         {pageRows.length === 0 ? (
           <EmptyState
@@ -151,6 +178,7 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
                 <tr>
                   <Th className="pl-5">{isClient ? 'Homeowner' : 'Lead'}</Th>
                   {!isClient && <Th>Stage</Th>}
+                  <Th>Assigned</Th>
                   <Th>Phone</Th>
                   <Th>Source</Th>
                   <Th>Activity</Th>
@@ -159,7 +187,7 @@ export default function LeadsOverview({ leads, segment = 'prospect' }: { leads: 
               </thead>
               <tbody>
                 {pageRows.map(lead => (
-                  <LeadRow key={lead.id} lead={lead} isClient={isClient} onClick={() => router.push(`/crm/leads/${lead.id}`)} />
+                  <LeadRow key={lead.id} lead={lead} isClient={isClient} assignee={assigneeName(lead.assigned_to)} onClick={() => router.push(`/crm/leads/${lead.id}`)} />
                 ))}
               </tbody>
             </table>
@@ -226,7 +254,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
-function LeadRow({ lead, isClient, onClick }: { lead: Lead; isClient: boolean; onClick: () => void }) {
+function LeadRow({ lead, isClient, assignee, onClick }: { lead: Lead; isClient: boolean; assignee: string | null; onClick: () => void }) {
   const fu = followUpState(lead)
   return (
     <tr onClick={onClick} className="cursor-pointer hover:bg-[#faf8f2] transition-colors group">
@@ -248,6 +276,16 @@ function LeadRow({ lead, isClient, onClick }: { lead: Lead; isClient: boolean; o
         </div>
       </Td>
       {!isClient && <Td><Pill tone={STATUS_CONFIG[lead.status].tone}>{STATUS_CONFIG[lead.status].label}</Pill></Td>}
+      <Td>
+        {assignee ? (
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <Avatar name={assignee} size={22} />
+            <span className="text-[13px] text-ink-2 font-medium">{assignee}</span>
+          </span>
+        ) : (
+          <span className="text-[13px] text-ink-3">—</span>
+        )}
+      </Td>
       <Td><span className="text-ink-2 whitespace-nowrap">{formatPhone(lead.phone)}</span></Td>
       <Td><span className="text-ink-2 whitespace-nowrap">{sourceLabel(lead.source)}</span></Td>
       <Td>

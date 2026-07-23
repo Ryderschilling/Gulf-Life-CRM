@@ -69,12 +69,19 @@ Server (`app/api/import/route.ts`): 3 actions (start/rows/finish). Dedupes by em
 - Project: `gulf-life-crm`, ref **ysspwvimwhydyjklhljo**, in the dedicated **"Gulf Life" org (Pro, $25/mo)** — intentionally separate from Ryder's other org (FOUND) so the whole org can be transferred to John later.
 - Schema: `supabase/migrations/000_init.sql` (everything) + `001_seed_brain.sql` (4 AI brain files). Both applied 2026-07-22.
 - `002_relationship.sql` — adds `leads.relationship` ('prospect' | 'client', default 'prospect', check + index). **Run this in the Supabase SQL editor BEFORE deploying the segment code** — the app filters/inserts on this column, so deploying first would 500 the pages.
+- `003_team.sql` (Jul 23) — multi-user: `profiles.active` + `profiles.must_change_password`, `todos.assigned_to`, 'assigned' activity type, team-wide profile SELECT, and column-level locks so `profiles.role`/`active` only change via the service role. Run after 002.
+
+## Team & Roles (added Jul 23, 2026)
+
+Two roles, mapped to UI labels: `owner` = **Admin** (Ryder, John — everything incl. Settings/Integrations, Campaigns, Import, user management), `sales_rep` = **Member** (works leads: pipeline, inbox, to-dos, AI; no campaigns/imports/settings-integrations). Nav hides admin pages for members; pages + API routes also enforce server-side (`lib/auth.ts` — `requireAdmin`, `isAdmin`, `getTeam`).
+
+- **Add users:** Settings → Team (admins only) → name + email-or-username + role + temp password. Accounts are created instantly via the Supabase admin API (`/api/team`) — no email delivery needed; bare usernames map to `<name>@gulflife.crm` like the login form. First login forces a password change (`must_change_password` → PasswordGate in the CRM layout).
+- **Deactivate, don't delete:** PATCH `/api/team/[id]` bans the auth user (~10y) + sets `profiles.active=false`; layout shows a DeactivatedScreen to any live session. History/attribution stays.
+- **Assignment:** every lead has `assigned_to` — dropdown on lead detail (logs an 'assigned' timeline event), assignee chip on pipeline cards + Overview column, Everyone / My leads / Unassigned filters on Pipeline + Overview. New leads auto-assign to their creator. Visibility stays shared (everyone sees all leads); assignment = responsibility.
+- **Attribution:** timeline + notes show who did what (activities/notes already carried `user_id`; sends log `created_by`).
 - Tables: profiles, imports, leads, lead_addresses, lead_notes, lead_activities, email_drafts, sms_messages, daily_digests, todos, ai_context_files, ai_memories, ai_conversations. RLS: any authenticated user (single-tenant).
 - Demo data seeded (9 owner leads + 12 guests), all tagged `demo`. Purge: `delete from leads where 'demo' = any(tags);` and clear todos.
-- Users: two accounts, both role `owner`:
-  - **Username login: `Ryder` / `123456`** — the login form maps a bare username to `<name>@gulflife.crm` under the hood (account: ryder@gulflife.crm). Supabase requires email-format accounts and 6-char minimum passwords, hence the mapping and 123456 instead of 1234.
-  - Ryderscott33@icloud.com / GulfLife2026! (original).
-  - ⚠ Before deploying publicly or giving John access, set a real password — 123456 on an owner account is trivially guessable once the app is on the internet.
+- Users: two accounts, both role `owner` (= Admin): the bare-username login `Ryder` (account ryder@gulflife.crm — the login form maps a bare username to `<name>@gulflife.crm`) and Ryderscott33@icloud.com. **Credentials are NOT stored in this file** — this repo is public; never commit passwords here. Ryder-account password was admin-reset Jul 23 2026 (the old one stopped matching; login form now surfaces real error causes instead of a blanket "wrong password"). Manage users + password resets from Settings → Team in the app.
   - John's login not yet created (need his email). Add via Supabase → Authentication → Add user; profile auto-creates via trigger. A bare-username account for John = create `john@gulflife.crm`.
 
 ## Environment (`.env.local` — never commit)

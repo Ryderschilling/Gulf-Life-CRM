@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth'
 import {
   mailchimpConfigured, getMailchimpAudienceInfo, listMailchimpTags,
   listMailchimpCampaigns, sendMailchimpCampaign, getOwnerLeadTagId,
@@ -120,6 +121,10 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Mass sends are admin-only — members work leads, they don't blast the list
+    const admin = await requireAdmin()
+    if (!admin) return NextResponse.json({ error: 'Campaigns are admin-only' }, { status: 403 })
 
     if (!mailchimpConfigured()) {
       return NextResponse.json({ error: 'Mailchimp is not configured' }, { status: 400 })

@@ -8,13 +8,15 @@ import { useRouter } from 'next/navigation'
 import { Plus, Phone, Mail, CalendarClock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
-import type { Lead, LeadStatus } from '@/lib/types'
+import type { Lead, LeadStatus, Profile } from '@/lib/types'
 import { LEAD_STATUS_LABELS } from '@/lib/types'
 import { STATUS_CONFIG, ORDERED_STATUSES, timeAgo, followUpState, leadDisplayName, cn } from '@/lib/utils'
-import { PageHeader, Button, Avatar, Pill } from '@/components/ui/kit'
+import { PageHeader, Button, Avatar, Pill, Segmented } from '@/components/ui/kit'
 import NewLeadModal from '@/components/leads/NewLeadModal'
 
-export default function PipelineBoard({ initialLeads }: { initialLeads: Lead[] }) {
+type OwnerFilter = 'all' | 'mine' | 'unassigned'
+
+export default function PipelineBoard({ initialLeads, team = [], meId = '' }: { initialLeads: Lead[]; team?: Profile[]; meId?: string }) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -22,12 +24,26 @@ export default function PipelineBoard({ initialLeads }: { initialLeads: Lead[] }
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverCol, setDragOverCol] = useState<LeadStatus | null>(null)
   const [showNewLead, setShowNewLead] = useState(false)
+  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all')
 
   useEffect(() => { setLeads(initialLeads) }, [initialLeads])
 
+  const teamById = new Map(team.map(p => [p.id, p]))
+  const assigneeName = (id: string | null) => {
+    const n = id ? teamById.get(id)?.full_name?.trim() : null
+    if (!n) return null
+    return n.includes('@') ? n.split('@')[0] : n.split(' ')[0]
+  }
+
+  const visibleLeads = leads.filter(l =>
+    ownerFilter === 'all' ? true :
+    ownerFilter === 'mine' ? l.assigned_to === meId :
+    !l.assigned_to
+  )
+
   const columns = ORDERED_STATUSES.map(status => ({
     status,
-    leads: leads.filter(l => l.status === status),
+    leads: visibleLeads.filter(l => l.status === status),
   }))
 
   function handleDragStart(e: React.DragEvent, leadId: string) {
@@ -78,7 +94,20 @@ export default function PipelineBoard({ initialLeads }: { initialLeads: Lead[] }
       <PageHeader
         title="Pipeline"
         subtitle="Drag owner leads between stages"
-        right={<Button onClick={() => setShowNewLead(true)}><Plus size={16} /> New Lead</Button>}
+        right={
+          <>
+            <Segmented<OwnerFilter>
+              options={[
+                { value: 'all', label: 'Everyone' },
+                { value: 'mine', label: 'My leads', count: leads.filter(l => l.assigned_to === meId).length },
+                { value: 'unassigned', label: 'Unassigned', count: leads.filter(l => !l.assigned_to).length },
+              ]}
+              value={ownerFilter}
+              onChange={setOwnerFilter}
+            />
+            <Button onClick={() => setShowNewLead(true)}><Plus size={16} /> New Lead</Button>
+          </>
+        }
       />
 
       <div className="flex gap-3.5 overflow-x-auto items-start pb-4 -mx-1 px-1">
@@ -132,6 +161,11 @@ export default function PipelineBoard({ initialLeads }: { initialLeads: Lead[] }
                     <div className="flex items-center gap-2 text-ink-3">
                       {lead.phone && <Phone size={12} />}
                       {lead.email && <Mail size={12} />}
+                      {assigneeName(lead.assigned_to) && (
+                        <span className="text-[11px] font-semibold text-accent bg-accent-soft rounded-full px-1.5 py-0.5" title={`Assigned to ${assigneeName(lead.assigned_to)}`}>
+                          {assigneeName(lead.assigned_to)}
+                        </span>
+                      )}
                       <span className="text-[11.5px] ml-auto">
                         {lead.last_contacted_at ? timeAgo(lead.last_contacted_at) : 'No contact yet'}
                       </span>

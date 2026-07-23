@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getTeam } from "@/lib/auth";
 import type { Lead, LeadActivity, LeadAddress, LeadNote, SmsMessage, EmailDraft } from "@/lib/types";
 import LeadDetail from "@/components/leads/LeadDetail";
 
@@ -9,13 +10,15 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: lead }, { data: activities }, { data: notes }, { data: addresses }, { data: sms }, { data: drafts }] = await Promise.all([
+  const [{ data: { user } }, { data: lead }, { data: activities }, { data: notes }, { data: addresses }, { data: sms }, { data: drafts }, team] = await Promise.all([
+    supabase.auth.getUser(),
     supabase.from("leads").select("*").eq("id", id).single(),
     supabase.from("lead_activities").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(100),
     supabase.from("lead_notes").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(50),
     supabase.from("lead_addresses").select("*").eq("lead_id", id).order("is_primary", { ascending: false }),
     supabase.from("sms_messages").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(20),
     supabase.from("email_drafts").select("*").eq("lead_id", id).eq("status", "pending").order("created_at", { ascending: false }).limit(5),
+    getTeam(),
   ]);
 
   if (!lead) notFound();
@@ -28,6 +31,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       addresses={(addresses ?? []) as LeadAddress[]}
       smsMessages={(sms ?? []) as SmsMessage[]}
       pendingDrafts={(drafts ?? []) as EmailDraft[]}
+      team={team}
+      meId={user?.id ?? ""}
     />
   );
 }
