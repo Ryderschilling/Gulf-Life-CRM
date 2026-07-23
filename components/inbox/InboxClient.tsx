@@ -5,7 +5,7 @@
 // leaving the CRM. Inbound messages are captured by the Quo / Resend
 // webhooks; this view merges them per lead into a two-way thread.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
@@ -59,6 +59,26 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
     return () => clearInterval(t)
   }, [])
 
+  // Read state — per browser (this device = this user). A conversation is
+  // unread while it has inbound messages newer than the last time it was
+  // open on screen; opening it clears the dot.
+  const [reads, setReads] = useState<Record<string, string>>({})
+  useEffect(() => {
+    try { setReads(JSON.parse(localStorage.getItem('glc_inbox_reads') ?? '{}')) } catch { /* fresh browser */ }
+  }, [])
+  const markRead = useCallback((leadId: string) => {
+    setReads(prev => {
+      if (prev[leadId] && prev[leadId] >= new Date().toISOString()) return prev
+      const next = { ...prev, [leadId]: new Date().toISOString() }
+      try { localStorage.setItem('glc_inbox_reads', JSON.stringify(next)) } catch { /* storage full/blocked */ }
+      return next
+    })
+  }, [])
+  const isUnread = useCallback(
+    (c: Convo) => c.items.some(i => i.dir === 'in' && i.at > (reads[c.leadId] ?? '')),
+    [reads],
+  )
+
   const convos = useMemo(() => {
     const map = new Map<string, Convo>()
     const push = (leadId: string, lead: LeadLite | null, item: Item) => {
@@ -103,6 +123,14 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
 
   const active = convos.find(c => c.leadId === activeId) ?? filtered[0] ?? null
   const unresponded = convos.filter(c => c.needsReply).length
+
+  // The open thread counts as read — including when a new message arrives
+  // while it's on screen.
+  const activeLeadId = active?.leadId
+  const activeLastAt = active?.last.at
+  useEffect(() => {
+    if (activeLeadId) markRead(activeLeadId)
+  }, [activeLeadId, activeLastAt, markRead])
   const smsCount = convos.filter(c => c.items.some(i => i.kind === 'sms')).length
   const emailCount = convos.filter(c => c.items.some(i => i.kind === 'email')).length
 
@@ -176,7 +204,7 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
                         </p>
                       </div>
                     </div>
-                    {c.needsReply && <span className="w-2 h-2 rounded-full bg-accent shrink-0 mt-1.5" title="Needs reply" />}
+                    {isUnread(c) && <span className="w-2 h-2 rounded-full bg-accent shrink-0 mt-1.5" title="Unread" />}
                   </button>
                 )
               })}

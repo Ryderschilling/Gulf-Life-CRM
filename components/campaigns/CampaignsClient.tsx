@@ -144,8 +144,8 @@ export default function CampaignsClient({ userEmail }: { userEmail: string }) {
             <Field label="Preview text" hint="The grey line shown next to the subject in inboxes — optional">
               <Input value={preview} onChange={e => setPreview(e.target.value)} placeholder="A short teaser for the inbox" />
             </Field>
-            <Field label="Message" hint="Plain writing is fine — it's wrapped in a clean branded layout, and the required unsubscribe footer is added automatically">
-              <Textarea value={body} onChange={e => setBody(e.target.value)} rows={10} placeholder={'Hi there,\n\nWrite your campaign like a normal email. Blank line = new paragraph.'} />
+            <Field label="Message" hint="Plain writing is fine — it's wrapped in the Gulf Life branded layout with the unsubscribe footer added automatically. Type *|FNAME|* to insert each person's first name.">
+              <Textarea value={body} onChange={e => setBody(e.target.value)} rows={10} placeholder={'Hi *|FNAME|*,\n\nWrite your campaign like a normal email. Blank line = new paragraph, links become clickable.'} />
             </Field>
 
             <div className="flex flex-wrap items-end justify-between gap-3 pt-1 border-t border-line mt-1">
