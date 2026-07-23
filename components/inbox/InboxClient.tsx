@@ -23,21 +23,23 @@ const EMAIL = {
   text: 'text-[#0d9488]',
 }
 
-interface LeadLite { id: string; name: string; phone: string | null; email: string | null }
+interface LeadLite { id: string; name: string; phone: string | null; email: string | null; relationship?: 'prospect' | 'client' | null }
 interface SmsRow { id: string; lead_id: string; body: string; direction: string; status: string; created_at: string; lead: LeadLite | null }
 interface EmailRow { id: string; lead_id: string; type: string; body: string; created_at: string; metadata: Record<string, unknown> | null; lead: LeadLite | null }
 
 interface Item { key: string; kind: 'sms' | 'email'; dir: 'in' | 'out'; text: string; at: string; subject?: string; status?: string }
-interface Convo { leadId: string; name: string; phone: string | null; email: string | null; items: Item[]; last: Item; needsReply: boolean }
+interface Convo { leadId: string; name: string; phone: string | null; email: string | null; relationship: 'prospect' | 'client'; items: Item[]; last: Item; needsReply: boolean }
 
 type Filter = 'all' | 'unresponded'
 type Channel = 'all' | 'sms' | 'email'
+type Group = 'all' | 'prospect' | 'client'
 
 export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: EmailRow[] }) {
   const router = useRouter()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [channel, setChannel] = useState<Channel>('all')
+  const [group, setGroup] = useState<Group>('all')
   const [search, setSearch] = useState('')
 
   // Live refresh — new inbound texts/emails appear without a manual reload.
@@ -119,12 +121,13 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
       if (!leadId) return
       let c = map.get(leadId)
       if (!c) {
-        c = { leadId, name: lead?.name ?? 'Unknown', phone: lead?.phone ?? null, email: lead?.email ?? null, items: [], last: item, needsReply: false }
+        c = { leadId, name: lead?.name ?? 'Unknown', phone: lead?.phone ?? null, email: lead?.email ?? null, relationship: lead?.relationship ?? 'prospect', items: [], last: item, needsReply: false }
         map.set(leadId, c)
       }
       if (lead?.name) c.name = lead.name
       if (lead?.phone) c.phone = lead.phone
       if (lead?.email) c.email = lead.email
+      if (lead?.relationship) c.relationship = lead.relationship
       c.items.push(item)
     }
     for (const s of sms) {
@@ -146,6 +149,7 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
 
   const filtered = useMemo(() => {
     let list = convos
+    if (group !== 'all') list = list.filter(c => c.relationship === group)
     if (filter === 'unresponded') list = list.filter(c => c.needsReply)
     if (channel !== 'all') list = list.filter(c => c.items.some(i => i.kind === channel))
     if (search.trim()) {
@@ -153,7 +157,7 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
       list = list.filter(c => c.name.toLowerCase().includes(q) || (c.email ?? '').toLowerCase().includes(q) || (c.phone ?? '').includes(q))
     }
     return list
-  }, [convos, filter, channel, search])
+  }, [convos, filter, channel, group, search])
 
   const active = convos.find(c => c.leadId === activeId) ?? filtered[0] ?? null
   const unresponded = convos.filter(c => c.needsReply).length
@@ -167,6 +171,8 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
   }, [activeLeadId, activeLastAt, markRead])
   const smsCount = convos.filter(c => c.items.some(i => i.kind === 'sms')).length
   const emailCount = convos.filter(c => c.items.some(i => i.kind === 'email')).length
+  const prospectCount = convos.filter(c => c.relationship === 'prospect').length
+  const clientCount = convos.filter(c => c.relationship === 'client').length
 
   return (
     <div>
@@ -203,6 +209,15 @@ export default function InboxClient({ sms, emails }: { sms: SmsRow[]; emails: Em
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
                 <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search conversations…" className="pl-9" />
               </div>
+              <Segmented<Group>
+                value={group}
+                onChange={setGroup}
+                options={[
+                  { value: 'all', label: 'All', count: convos.length },
+                  { value: 'prospect', label: 'Leads', count: prospectCount },
+                  { value: 'client', label: 'Clients', count: clientCount },
+                ]}
+              />
               <Segmented<Filter>
                 value={filter}
                 onChange={setFilter}

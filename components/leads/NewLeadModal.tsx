@@ -10,8 +10,9 @@ import { Modal, Field, Input, Select, Textarea, Button } from '@/components/ui/k
 
 const OWNER_STAGES: LeadStatus[] = ['new', 'contacted', 'nurturing', 'proposal']
 
-export default function NewLeadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function NewLeadModal({ open, onClose, relationship = 'prospect' }: { open: boolean; onClose: () => void; relationship?: 'prospect' | 'client' }) {
   const router = useRouter()
+  const isClient = relationship === 'client'
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     name: '', email: '', phone: '', company: '',
@@ -32,6 +33,7 @@ export default function NewLeadModal({ open, onClose }: { open: boolean; onClose
       const { data: lead, error } = await supabase.from('leads').insert({
         name: form.name.trim(),
         lead_type: 'owner',
+        relationship,
         email: form.email.trim().toLowerCase() || null,
         phone: form.phone.trim() || null,
         company: form.company.trim() || null,
@@ -67,7 +69,7 @@ export default function NewLeadModal({ open, onClose }: { open: boolean; onClose
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="New Lead">
+    <Modal open={open} onClose={onClose} title={isClient ? 'New Homeowner' : 'New Lead'}>
       <div className="flex flex-col gap-4">
         <Field label="Full name *">
           <Input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Sarah Mitchell" autoFocus />
@@ -114,7 +116,7 @@ export default function NewLeadModal({ open, onClose }: { open: boolean; onClose
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} loading={saving}>Add Lead</Button>
+          <Button onClick={save} loading={saving}>{isClient ? 'Add Homeowner' : 'Add Lead'}</Button>
         </div>
       </div>
     </Modal>

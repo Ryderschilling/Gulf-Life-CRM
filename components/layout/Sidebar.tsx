@@ -7,11 +7,16 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/kit'
 import type { Profile } from '@/lib/types'
+import type { Segment } from '@/lib/segment'
 
 interface Props {
   profile: Profile | null
   pendingTodoCount?: number
+  segment?: Segment
 }
+
+// Pipeline + Analytics are sales-funnel tools — hidden when viewing Clients.
+const PROSPECT_ONLY = ['/crm/pipeline', '/crm/analytics']
 
 const NAV = [
   { href: '/crm', label: 'Overview', icon: LayoutDashboard },
@@ -25,9 +30,19 @@ const NAV = [
   { href: '/crm/settings', label: 'Settings', icon: Settings },
 ]
 
-export default function Sidebar({ profile, pendingTodoCount = 0 }: Props) {
+export default function Sidebar({ profile, pendingTodoCount = 0, segment = 'prospect' }: Props) {
   const pathname = usePathname()
   const router = useRouter()
+
+  const visibleNav = NAV.filter(item => !(segment === 'client' && PROSPECT_ONLY.includes(item.href)))
+
+  function switchSegment(next: Segment) {
+    if (next === segment) return
+    document.cookie = `crm_seg=${next};path=/;max-age=31536000;samesite=lax`
+    const onProspectOnly = PROSPECT_ONLY.some(p => pathname === p || pathname.startsWith(p + '/'))
+    if (next === 'client' && onProspectOnly) router.push('/crm')
+    else router.refresh()
+  }
 
   const rawName = profile?.full_name ?? ''
   const displayName = rawName.includes('@')
@@ -60,9 +75,27 @@ export default function Sidebar({ profile, pendingTodoCount = 0 }: Props) {
           </div>
         </div>
 
+        {/* Prospect / Client segment toggle */}
+        <div className="px-3 pb-3">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-[#f1f2f7] border border-line">
+            {(['prospect', 'client'] as const).map(seg => (
+              <button
+                key={seg}
+                onClick={() => switchSegment(seg)}
+                className={cn(
+                  'flex-1 py-1.5 rounded-lg text-[12.5px] font-semibold transition-colors',
+                  segment === seg ? 'bg-card text-accent shadow-card' : 'text-ink-3 hover:text-ink-2'
+                )}
+              >
+                {seg === 'prospect' ? 'Prospects' : 'Clients'}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Nav */}
         <nav className="px-3 flex-1 overflow-y-auto">
-          {NAV.map(item => {
+          {visibleNav.map(item => {
             const active = isActive(item.href)
             const Icon = item.icon
             const badge = item.badge && pendingTodoCount > 0 ? pendingTodoCount : undefined
@@ -120,7 +153,7 @@ export default function Sidebar({ profile, pendingTodoCount = 0 }: Props) {
         style={{ padding: '6px 0 max(6px, env(safe-area-inset-bottom))' }}
       >
         <div className="flex justify-around">
-          {NAV.slice(0, 5).map(item => {
+          {visibleNav.slice(0, 5).map(item => {
             const active = isActive(item.href)
             const Icon = item.icon
             return (

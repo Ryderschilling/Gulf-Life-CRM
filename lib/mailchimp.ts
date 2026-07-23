@@ -393,6 +393,7 @@ export async function syncOutstandingLeads(
     .from('leads')
     .select('*')
     .eq('lead_type', 'owner')
+    .eq('relationship', 'prospect') // clients (current homeowners) don't auto-flow into the marketing audience
     .not('email', 'is', null)
     .limit(1000)
 

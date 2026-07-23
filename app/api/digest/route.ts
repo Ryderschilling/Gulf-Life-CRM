@@ -22,11 +22,11 @@ async function generateDigest(supabase: Awaited<ReturnType<typeof createClient>>
     wonThisMonthResult,
     newThisWeekResult,
   ] = await Promise.all([
-    supabase.from('leads').select('*').eq('lead_type', 'owner').not('status', 'in', '("closed_won","closed_lost")'),
-    supabase.from('leads').select('*').eq('lead_type', 'owner').lte('next_follow_up_at', now.toISOString()).not('status', 'in', '("closed_won","closed_lost")').order('next_follow_up_at', { ascending: true }),
+    supabase.from('leads').select('*').eq('lead_type', 'owner').eq('relationship', 'prospect').not('status', 'in', '("closed_won","closed_lost")'),
+    supabase.from('leads').select('*').eq('lead_type', 'owner').eq('relationship', 'prospect').lte('next_follow_up_at', now.toISOString()).not('status', 'in', '("closed_won","closed_lost")').order('next_follow_up_at', { ascending: true }),
     supabase.from('email_drafts').select('count').eq('status', 'pending').single(),
-    supabase.from('leads').select('count').eq('lead_type', 'owner').eq('status', 'closed_won').gte('updated_at', startOfMonth).single(),
-    supabase.from('leads').select('count').eq('lead_type', 'owner').gte('created_at', oneWeekAgo).single(),
+    supabase.from('leads').select('count').eq('lead_type', 'owner').eq('relationship', 'prospect').eq('status', 'closed_won').gte('updated_at', startOfMonth).single(),
+    supabase.from('leads').select('count').eq('lead_type', 'owner').eq('relationship', 'prospect').gte('created_at', oneWeekAgo).single(),
   ])
 
   const allLeads = (allLeadsResult.data ?? []) as Lead[]

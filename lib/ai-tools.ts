@@ -561,7 +561,7 @@ export async function executeAITool(
       }
 
       case 'get_pipeline_stats': {
-        const { data: leads } = await supabase.from('leads').select('lead_type, status, next_follow_up_at').eq('lead_type', 'owner')
+        const { data: leads } = await supabase.from('leads').select('lead_type, status, next_follow_up_at').eq('lead_type', 'owner').eq('relationship', 'prospect')
         const owners = (leads ?? []) as Pick<Lead, 'lead_type' | 'status' | 'next_follow_up_at'>[]
         const now = new Date().toISOString()
         const byStage: Record<string, number> = {}

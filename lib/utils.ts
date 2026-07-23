@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { formatDistanceToNow, format } from "date-fns";
-import type { LeadStatus, LeadType, KanbanColumn, Lead } from "./types";
+import type { LeadStatus, LeadType, Relationship, KanbanColumn, Lead } from "./types";
 import type { PillTone } from "@/components/ui/kit";
 
 export function cn(...inputs: ClassValue[]) {
@@ -43,6 +43,12 @@ export const STATUS_CONFIG: Record<LeadStatus, { label: string; tone: PillTone; 
 export const TYPE_CONFIG: Record<LeadType, { label: string; tone: PillTone }> = {
   owner: { label: "Owner Lead", tone: "indigo" },
   guest: { label: "Guest",      tone: "green" },
+};
+
+// Owner sub-segment pills — prospect (in the pipeline) vs client (current homeowner)
+export const RELATIONSHIP_CONFIG: Record<Relationship, { label: string; tone: PillTone }> = {
+  prospect: { label: "Prospect", tone: "indigo" },
+  client:   { label: "Client",   tone: "green" },
 };
 
 export const ORDERED_STATUSES: LeadStatus[] = [

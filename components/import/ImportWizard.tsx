@@ -32,6 +32,7 @@ export default function ImportWizard() {
   const [rows, setRows] = useState<Record<string, string>[]>([])
   const [mapping, setMapping] = useState<Record<string, string | null>>({})
   const [dedupe, setDedupe] = useState<'update' | 'skip'>('update')
+  const [relationship, setRelationship] = useState<'prospect' | 'client'>('client')
   const [progress, setProgress] = useState(0)
   const [report, setReport] = useState<Report | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -82,7 +83,7 @@ export default function ImportWizard() {
       const startRes = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start', filename: fileName, lead_type: LEAD_TYPE, mapping, row_count: rows.length }),
+        body: JSON.stringify({ action: 'start', filename: fileName, lead_type: LEAD_TYPE, relationship, mapping, row_count: rows.length }),
       })
       const { import_id, error: startErr } = await startRes.json()
       if (startErr || !import_id) throw new Error(startErr ?? 'Failed to start import')
@@ -93,7 +94,7 @@ export default function ImportWizard() {
         const res = await fetch('/api/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'rows', import_id, lead_type: LEAD_TYPE, dedupe, contacts: chunk }),
+          body: JSON.stringify({ action: 'rows', import_id, lead_type: LEAD_TYPE, relationship, dedupe, contacts: chunk }),
         })
         const data = await res.json()
         if (data.error) throw new Error(data.error)
@@ -204,6 +205,17 @@ export default function ImportWizard() {
               </div>
               <div className="flex items-center gap-4 flex-wrap">
                 <div>
+                  <p className="text-[11.5px] font-semibold text-ink-3 uppercase tracking-wide m-0 mb-1">Import as</p>
+                  <Segmented<'prospect' | 'client'>
+                    value={relationship}
+                    onChange={setRelationship}
+                    options={[
+                      { value: 'client', label: 'Homeowners' },
+                      { value: 'prospect', label: 'Leads' },
+                    ]}
+                  />
+                </div>
+                <div>
                   <p className="text-[11.5px] font-semibold text-ink-3 uppercase tracking-wide m-0 mb-1">If already in CRM</p>
                   <Segmented<'update' | 'skip'>
                     value={dedupe}
@@ -265,7 +277,7 @@ export default function ImportWizard() {
             <div className="flex items-center justify-between px-6 py-4">
               <Button variant="secondary" onClick={reset}><ArrowLeft size={15} /> Start over</Button>
               <Button onClick={runImport} disabled={contacts.length === 0}>
-                Import {contacts.length.toLocaleString()} leads <ArrowRight size={15} />
+                Import {contacts.length.toLocaleString()} {relationship === 'client' ? 'homeowners' : 'leads'} <ArrowRight size={15} />
               </Button>
             </div>
           </Card>

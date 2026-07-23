@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Sidebar from "@/components/layout/Sidebar";
 import AIDrawer from "@/components/ai/AIDrawer";
 import { Toaster } from "react-hot-toast";
+import { getSegment } from "@/lib/segment";
 import type { Profile } from "@/lib/types";
 
 export default async function CRMLayout({ children }: { children: React.ReactNode }) {
@@ -10,6 +11,8 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  const segment = await getSegment();
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -42,7 +45,7 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar profile={profileWithName} pendingTodoCount={pendingTodoCount} />
+      <Sidebar profile={profileWithName} pendingTodoCount={pendingTodoCount} segment={segment} />
       <main className="flex-1 min-w-0">
         <div className="max-w-[1240px] mx-auto px-5 md:px-8 py-7 pb-24 md:pb-10">
           {children}

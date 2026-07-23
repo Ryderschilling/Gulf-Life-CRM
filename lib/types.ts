@@ -20,6 +20,9 @@ export interface Profile {
 // ----------------------------------------
 export type LeadType = 'owner' | 'guest'
 
+/** Owner sub-segment: sales prospect vs current managed homeowner. Guests ignore this. */
+export type Relationship = 'prospect' | 'client'
+
 export type LeadStatus =
   | 'new'
   | 'contacted'
@@ -49,6 +52,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 export interface Lead {
   id: string
   lead_type: LeadType
+  relationship: Relationship
   name: string
   email: string | null
   phone: string | null

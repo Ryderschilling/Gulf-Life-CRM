@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
     if (body.action === 'rows') {
       const importId = String(body.import_id)
       const leadType: 'owner' | 'guest' = 'owner'
+      // Homeowner CSVs come in as clients; explicit 'prospect' still supported.
+      const relationship: 'prospect' | 'client' = body.relationship === 'client' ? 'client' : 'prospect'
       const dedupe: 'update' | 'skip' = body.dedupe === 'skip' ? 'skip' : 'update'
       const contacts = (body.contacts ?? []) as AggregatedContact[]
 
@@ -107,6 +109,7 @@ export async function POST(req: NextRequest) {
           // Insert new lead
           const { data: lead, error } = await supabase.from('leads').insert({
             lead_type: leadType,
+            relationship,
             name: c.name.trim().slice(0, 200),
             email: c.email,
             phone: c.phone,

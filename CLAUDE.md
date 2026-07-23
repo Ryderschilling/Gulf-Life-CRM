@@ -10,6 +10,14 @@ A sales + guest-marketing CRM with AI that can take actions. Two record types li
 - **`owner`** — homeowners on 30A who might hire Gulf Life to manage their rental property. These go through the sales pipeline: `new → contacted → nurturing → proposal → closed_won / closed_lost`.
 - **`guest`** — past renters imported from Streamline (John's booking platform) via CSV. Marketing database: stay history, lifetime spend, last property. NOT pipeline records.
 
+Owner records also carry a **`relationship`** flag (added Jul 23 2026, migration `002`):
+- **`prospect`** — a homeowner LEAD in the sales pipeline (the DEFAULT; every pre-existing owner).
+- **`client`** — a CURRENT managed homeowner (imported from Streamline). Not a sales record.
+
+A global **Prospects | Clients** toggle in the sidebar drives it — cookie `crm_seg`, read server-side by `lib/segment.ts` `getSegment()`, which each page passes into its Supabase `.eq('relationship', segment)` filter. In Client mode the **Pipeline + Analytics** nav items hide (they're sales-funnel tools), and clients are excluded from the pipeline, the daily briefing (`/api/digest`), the AI pipeline stats/snapshot, and Mailchimp auto-sync (`syncOutstandingLeads`) — so existing homeowners never leak into prospecting. The CSV import tags rows `client` by default ("Homeowners" vs "Leads" switch in the wizard). Manual New-Lead in Client mode creates a `client`.
+
+**Still prospect+client combined (deliberate, revisit later):** the To-Do queue, Campaigns audiences, and `sync_mailchimp`-all AI tool. Segment-aware campaign audiences are the main follow-up before marketing to clients.
+
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack) + TypeScript + Tailwind v3
@@ -56,6 +64,7 @@ Server (`app/api/import/route.ts`): 3 actions (start/rows/finish). Dedupes by em
 
 - Project: `gulf-life-crm`, ref **ysspwvimwhydyjklhljo**, in the dedicated **"Gulf Life" org (Pro, $25/mo)** — intentionally separate from Ryder's other org (FOUND) so the whole org can be transferred to John later.
 - Schema: `supabase/migrations/000_init.sql` (everything) + `001_seed_brain.sql` (4 AI brain files). Both applied 2026-07-22.
+- `002_relationship.sql` — adds `leads.relationship` ('prospect' | 'client', default 'prospect', check + index). **Run this in the Supabase SQL editor BEFORE deploying the segment code** — the app filters/inserts on this column, so deploying first would 500 the pages.
 - Tables: profiles, imports, leads, lead_addresses, lead_notes, lead_activities, email_drafts, sms_messages, daily_digests, todos, ai_context_files, ai_memories, ai_conversations. RLS: any authenticated user (single-tenant).
 - Demo data seeded (9 owner leads + 12 guests), all tagged `demo`. Purge: `delete from leads where 'demo' = any(tags);` and clear todos.
 - Users: two accounts, both role `owner`:

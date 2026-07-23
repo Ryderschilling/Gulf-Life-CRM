@@ -137,6 +137,7 @@ export async function buildAIContext(
       .from('leads')
       .select('name, status, email, phone, last_contacted_at, next_follow_up_at, source')
       .eq('lead_type', 'owner')
+      .eq('relationship', 'prospect')
       .not('status', 'in', '("closed_won","closed_lost")')
       .order('created_at', { ascending: false })
       .limit(25)
