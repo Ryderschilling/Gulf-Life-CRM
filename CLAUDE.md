@@ -16,6 +16,10 @@ Owner records also carry a **`relationship`** flag (added Jul 23 2026, migration
 
 A global **Prospects | Clients** toggle in the sidebar drives it — cookie `crm_seg`, read server-side by `lib/segment.ts` `getSegment()`, which each page passes into its Supabase `.eq('relationship', segment)` filter. In Client mode the **Pipeline + Analytics** nav items hide (they're sales-funnel tools), and clients are excluded from the pipeline, the daily briefing (`/api/digest`), the AI pipeline stats/snapshot, and Mailchimp auto-sync (`syncOutstandingLeads`) — so existing homeowners never leak into prospecting. The CSV import tags rows `client` by default ("Homeowners" vs "Leads" switch in the wizard). Manual New-Lead in Client mode creates a `client`.
 
+href:
+
+{*Smoth & Addison*} 
+
 **Still prospect+client combined (deliberate, revisit later):** the To-Do queue, Campaigns audiences, and `sync_mailchimp`-all AI tool. Segment-aware campaign audiences are the main follow-up before marketing to clients.
 
 ## Stack

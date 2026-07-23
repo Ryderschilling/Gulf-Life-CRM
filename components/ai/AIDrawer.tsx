@@ -19,6 +19,8 @@ const SUGGESTIONS = [
   'How is the pipeline looking?',
 ]
 
+
+
 export default function AIDrawer() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<AIChatMessage[]>([])
@@ -28,7 +30,6 @@ export default function AIDrawer() {
   const pathname = usePathname()
   const router = useRouter()
   const scrollRef = useRef<HTMLDivElement>(null)
-
   // Pull the lead id from the URL when on a lead detail page
   const leadMatch = pathname.match(/^\/crm\/leads\/([0-9a-f-]{36})/)
   const leadId = leadMatch?.[1]
@@ -37,7 +38,7 @@ export default function AIDrawer() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, busy])
 
-  // Esc closes the drawer
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
