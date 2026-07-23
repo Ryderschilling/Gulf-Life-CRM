@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, KanbanSquare, CheckSquare, Inbox, BarChart3, Sparkles, Upload, Settings, LogOut, Waves } from 'lucide-react'
+import { LayoutDashboard, KanbanSquare, CheckSquare, Inbox, Megaphone, BarChart3, Sparkles, Upload, Settings, LogOut, Waves } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/kit'
@@ -17,6 +17,7 @@ const NAV = [
   { href: '/crm', label: 'Overview', icon: LayoutDashboard },
   { href: '/crm/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { href: '/crm/inbox', label: 'Inbox', icon: Inbox },
+  { href: '/crm/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/crm/todo', label: 'To-Do', icon: CheckSquare, badge: true },
   { href: '/crm/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/crm/ai', label: 'AI Assistant', icon: Sparkles },
