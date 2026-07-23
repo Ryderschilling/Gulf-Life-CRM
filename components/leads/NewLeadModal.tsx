@@ -52,6 +52,9 @@ export default function NewLeadModal({ open, onClose }: { open: boolean; onClose
         })
       }
 
+      // Auto-sync the new lead into Mailchimp (fire-and-forget; demo excluded server-side)
+      fetch('/api/mailchimp/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'outstanding' }) }).catch(() => {})
+
       toast.success(`${form.name} added`)
       setForm({ name: '', email: '', phone: '', company: '', status: 'new', source: 'referral', property_interest: '', next_follow_up_at: '', note: '' })
       onClose()

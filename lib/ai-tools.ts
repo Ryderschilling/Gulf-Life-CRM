@@ -453,6 +453,11 @@ export async function executeAITool(
         if (args.note) {
           await supabase.from('lead_notes').insert({ lead_id: data.id, user_id: userId, body: String(args.note) })
         }
+        // Auto-sync into Mailchimp (skips demo leads / missing email)
+        if (data.email && mailchimpConfigured()) {
+          const mcRes = await syncLeadToMailchimp(data as Lead)
+          if (mcRes.ok) await supabase.from('leads').update({ mailchimp_synced_at: new Date().toISOString(), mailchimp_status: 'synced' }).eq('id', data.id)
+        }
         return {
           result: J({ ok: true, lead: leadSummary(data as Lead) }),
           action: { tool: 'create_lead', summary: `Created lead: ${insert.name}`, ok: true, lead_id: data.id },
@@ -482,6 +487,12 @@ export async function executeAITool(
             { from_status: res.lead.status, to_status: updates.status })
         } else {
           await logActivity(supabase, res.lead.id, userId, 'ai_action', `AI updated: ${changed.join(', ')}`)
+        }
+        // Keep Mailchimp in step (stage tags, new email, etc.)
+        const merged = { ...res.lead, ...updates } as Lead
+        if (merged.email && mailchimpConfigured()) {
+          const mcRes = await syncLeadToMailchimp(merged)
+          if (mcRes.ok) await supabase.from('leads').update({ mailchimp_synced_at: new Date().toISOString(), mailchimp_status: 'synced' }).eq('id', res.lead.id)
         }
         return {
           result: J({ ok: true, updated: changed }),

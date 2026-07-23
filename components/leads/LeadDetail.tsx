@@ -55,6 +55,8 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
         metadata: { from_status: lead.status, to_status: newStatus },
       }),
     })
+    // Keep the lead's Stage tag current in Mailchimp (fire-and-forget)
+    fetch('/api/mailchimp/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'outstanding' }) }).catch(() => {})
     toast.success(`Moved to ${LEAD_STATUS_LABELS[newStatus]}`)
     router.refresh()
   }

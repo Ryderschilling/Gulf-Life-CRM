@@ -37,6 +37,13 @@ export interface MailchimpSyncResult {
   error?: string
 }
 
+/** Demo/seed data must NEVER enter the real audience — fake addresses
+ *  bounce and damage sending reputation. */
+export function isDemoLead(lead: Pick<Lead, 'email' | 'tags'>): boolean {
+  if ((lead.tags ?? []).includes('demo')) return true
+  return !!lead.email && lead.email.toLowerCase().endsWith('@example.com')
+}
+
 /** Upsert one lead as an audience member + apply tags. */
 export async function syncLeadToMailchimp(lead: Lead): Promise<MailchimpSyncResult> {
   if (!mailchimpConfigured()) {
@@ -44,6 +51,9 @@ export async function syncLeadToMailchimp(lead: Lead): Promise<MailchimpSyncResu
   }
   if (!lead.email) {
     return { ok: false, error: 'Lead has no email address' }
+  }
+  if (isDemoLead(lead)) {
+    return { ok: false, error: 'Demo lead — not synced to the real audience' }
   }
 
   const audienceId = process.env.MAILCHIMP_AUDIENCE_ID!
@@ -356,4 +366,58 @@ export async function sendMailchimpCampaign(input: SendCampaignInput): Promise<{
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Mailchimp request failed' }
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// Auto-sync — every CRM lead with an email is mirrored into the
+// Mailchimp audience automatically. Callers fire this after any
+// lead create/update (and it self-heals: anything missed gets
+// picked up on the next call). Demo leads are always excluded.
+// ════════════════════════════════════════════════════════════
+
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// Re-syncing stamps mailchimp_synced_at, which itself bumps updated_at via
+// the DB trigger — tolerate that self-write so leads don't loop forever.
+const RESYNC_TOLERANCE_MS = 5_000
+
+/** Sync every owner lead whose data changed since its last sync (or that
+ *  was never synced). Bounded per call; safe to call often. */
+export async function syncOutstandingLeads(
+  supabase: SupabaseClient,
+  limit = 100,
+): Promise<{ synced: number; failed: number; skipped: number }> {
+  if (!mailchimpConfigured()) return { synced: 0, failed: 0, skipped: 0 }
+
+  const { data } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('lead_type', 'owner')
+    .not('email', 'is', null)
+    .limit(1000)
+
+  const now = new Date().toISOString()
+  let synced = 0, failed = 0, skipped = 0
+
+  const outstanding = ((data ?? []) as Lead[]).filter(l => {
+    if (isDemoLead(l)) { skipped++; return false }
+    const syncedAt = (l as unknown as { mailchimp_synced_at?: string | null }).mailchimp_synced_at
+    if (!syncedAt) return true
+    const updatedAt = (l as unknown as { updated_at?: string }).updated_at
+    if (!updatedAt) return false
+    return new Date(updatedAt).getTime() - new Date(syncedAt).getTime() > RESYNC_TOLERANCE_MS
+  }).slice(0, limit)
+
+  for (const lead of outstanding) {
+    const result = await syncLeadToMailchimp(lead)
+    if (result.ok) {
+      synced++
+      await supabase.from('leads').update({ mailchimp_synced_at: now, mailchimp_status: 'synced' }).eq('id', lead.id)
+    } else {
+      failed++
+      await supabase.from('leads').update({ mailchimp_status: 'failed' }).eq('id', lead.id)
+    }
+  }
+
+  return { synced, failed, skipped }
 }

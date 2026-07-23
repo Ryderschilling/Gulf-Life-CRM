@@ -64,6 +64,8 @@ export default function PipelineBoard({ initialLeads }: { initialLeads: Lead[] }
           metadata: { from_status: prevStatus, to_status: newStatus },
         }),
       })
+      // Keep the lead's Stage tag current in Mailchimp (fire-and-forget)
+      fetch('/api/mailchimp/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'outstanding' }) }).catch(() => {})
       router.refresh()
     } catch {
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: prevStatus } : l))

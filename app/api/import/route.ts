@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { syncOutstandingLeads } from '@/lib/mailchimp'
 import type { AggregatedContact } from '@/lib/csv-map'
 import type { Lead } from '@/lib/types'
 
@@ -169,7 +170,14 @@ export async function POST(req: NextRequest) {
     // ── FINISH ─────────────────────────────────────────────
     if (body.action === 'finish') {
       const { data } = await supabase.from('imports').select('*').eq('id', body.import_id).single()
-      return NextResponse.json({ summary: data })
+      // Auto-sync freshly imported leads into Mailchimp (demo excluded; non-fatal)
+      let mailchimp: { synced: number; failed: number; skipped: number } | null = null
+      try {
+        mailchimp = await syncOutstandingLeads(supabase, 200)
+      } catch (err) {
+        console.error('[import finish] mailchimp sync failed', err)
+      }
+      return NextResponse.json({ summary: data, mailchimp })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { syncLeadToMailchimp, mailchimpConfigured } from '@/lib/mailchimp'
+import { syncLeadToMailchimp, syncOutstandingLeads, mailchimpConfigured } from '@/lib/mailchimp'
 import type { Lead } from '@/lib/types'
 
 export const maxDuration = 60
@@ -19,7 +19,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Mailchimp is not set up yet — add the API key and audience ID in Settings.' }, { status: 400 })
     }
 
-    const body = await req.json() as { lead_ids?: string[]; lead_type?: 'guest' | 'owner' }
+    const body = await req.json() as { lead_ids?: string[]; lead_type?: 'guest' | 'owner'; mode?: 'outstanding' }
+
+    // Auto-sync mode — fired after any lead create/update in the UI.
+    // Syncs whatever is new or changed since its last sync; demo leads excluded.
+    if (body.mode === 'outstanding') {
+      const result = await syncOutstandingLeads(supabase)
+      return NextResponse.json(result)
+    }
 
     let leads: Lead[] = []
     if (body.lead_ids && body.lead_ids.length > 0) {
