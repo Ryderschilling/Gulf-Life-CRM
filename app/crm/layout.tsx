@@ -50,7 +50,8 @@ export default async function CRMLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen">
       <Sidebar profile={profileWithName} pendingTodoCount={pendingTodoCount} segment={segment} />
       <main className="flex-1 min-w-0">
-        <div className="max-w-[1240px] mx-auto px-5 md:px-8 py-7 pb-24 md:pb-10">
+        {/* id lets Gulf AI read exactly what the user is looking at (see AIDrawer.capturePageContext) */}
+        <div id="crm-main" className="max-w-[1240px] mx-auto px-5 md:px-8 py-7 pb-24 md:pb-10">
           {children}
         </div>
       </main>

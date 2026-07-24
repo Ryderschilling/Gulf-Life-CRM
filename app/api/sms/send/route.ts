@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendQuoSms, quoConfigured } from '@/lib/quo'
 import { toE164 } from '@/lib/utils'
+import { markContacted } from '@/lib/pipeline'
 
 export async function POST(req: NextRequest) {
   try {
@@ -47,7 +48,8 @@ export async function POST(req: NextRequest) {
     }
 
     await Promise.all([
-      supabase.from('leads').update({ last_contacted_at: new Date().toISOString() }).eq('id', lead_id),
+      // Stamps last_contacted_at AND advances new → contacted on first outbound text.
+      markContacted(supabase, lead_id, user.id),
       supabase.from('lead_activities').insert({
         lead_id, user_id: user.id, type: 'sms_sent',
         body: `Text sent: "${body.trim().slice(0, 100)}"`,

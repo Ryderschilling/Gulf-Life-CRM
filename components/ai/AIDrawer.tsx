@@ -13,11 +13,27 @@ import type { AIActionResult, AIChatMessage } from '@/lib/types'
 import { AIMark, AIThinking } from '@/components/ai/AIMark'
 
 const SUGGESTIONS = [
+  'What am I looking at on this page?',
   'Who should I follow up with today?',
   'Draft a follow-up email for my proposal-stage leads',
   'Add a lead: ',
-  'How is the pipeline looking?',
 ]
+
+// Read exactly what the user currently sees on screen, so Gulf AI can
+// answer "what am I looking at", "summarize this", "the third one", etc.
+// Grabs the visible text of the main content region (id set in app/crm/layout.tsx).
+// innerText only — no HTML, no injection surface. Capped to keep tokens bounded.
+function capturePageContext() {
+  if (typeof document === 'undefined') return undefined
+  const root = document.getElementById('crm-main')
+  const raw = (root?.innerText ?? '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  if (!raw) return undefined
+  return {
+    path: window.location.pathname,
+    title: document.title,
+    text: raw.length > 6000 ? raw.slice(0, 6000) + '\n…(truncated)' : raw,
+  }
+}
 
 
 
@@ -61,6 +77,7 @@ export default function AIDrawer() {
           message: content,
           conversation_id: conversationId ?? undefined,
           lead_id: leadId ?? undefined,
+          page_context: capturePageContext(),
         }),
       })
       const data = await res.json()
@@ -87,7 +104,7 @@ export default function AIDrawer() {
           onClick={() => setOpen(true)}
           className="ai-orb ai-chip-in fixed bottom-6 right-6 z-[150] w-[54px] h-[54px] rounded-full flex items-center justify-center"
           title="Ask Gulf AI"
-          style={{ bottom: 'max(24px, calc(env(safe-area-inset-bottom) + 66px))' }}
+          style={{ bottom: 'max(96px, calc(env(safe-area-inset-bottom) + 100px))' }}
         >
           <AIMark size={30} variant="white" />
         </button>
@@ -106,7 +123,7 @@ export default function AIDrawer() {
                 <AIMark size={34} thinking={busy} />
                 <div>
                   <p className="text-[14.5px] font-bold text-ink m-0 tracking-tight">Gulf AI</p>
-                  <p className="text-[11.5px] text-ink-3 m-0">{leadId ? 'Has this lead\'s full context' : 'Knows your whole pipeline'}</p>
+                  <p className="text-[11.5px] text-ink-3 m-0">{leadId ? 'Has this lead\'s full context' : 'Sees this page + your whole pipeline'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">

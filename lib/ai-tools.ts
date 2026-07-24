@@ -13,6 +13,7 @@ import { syncLeadToMailchimp, mailchimpConfigured } from './mailchimp'
 import { toE164 } from './utils'
 import { startOfTodayISO, followUpStatus, localTimeToISO } from './dates'
 import { sendEmail, mailerConfigured } from './mailer'
+import { markContacted } from './pipeline'
 
 // ── Tool specs (OpenAI function-calling format) ─────────────
 export const AI_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -629,7 +630,7 @@ export async function executeAITool(
           trigger_type: 'ai_chat', status: 'sent', ai_generated: true,
           sent_at: new Date().toISOString(), sent_by: userId,
         })
-        await supabase.from('leads').update({ last_contacted_at: new Date().toISOString() }).eq('id', res.lead.id)
+        await markContacted(supabase, res.lead.id, userId)
         await logActivity(supabase, res.lead.id, userId, 'email_sent', `Email sent (via AI): "${args.subject}"`)
         return {
           result: J({ ok: true, sent_to: res.lead.email }),
@@ -653,7 +654,7 @@ export async function executeAITool(
           sent_at: sms.ok ? new Date().toISOString() : null, created_by: userId,
         })
         if (!sms.ok) return { result: J({ error: sms.error }), action: { tool: 'send_sms', summary: `Text to ${res.lead.name} FAILED`, ok: false, lead_id: res.lead.id } }
-        await supabase.from('leads').update({ last_contacted_at: new Date().toISOString() }).eq('id', res.lead.id)
+        await markContacted(supabase, res.lead.id, userId)
         await logActivity(supabase, res.lead.id, userId, 'sms_sent', `Text sent (via AI): "${String(args.message).slice(0, 80)}"`)
         return {
           result: J({ ok: true }),

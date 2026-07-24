@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendEmail, mailerConfigured } from '@/lib/mailer'
 import { learnFromDraftEdit } from '@/lib/learn'
+import { markContacted } from '@/lib/pipeline'
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,7 +51,8 @@ export async function POST(req: NextRequest) {
       }
 
       await Promise.all([
-        supabase.from('leads').update({ last_contacted_at: now }).eq('id', lead_id),
+        // Stamps last_contacted_at AND advances new → contacted on first outbound email.
+        markContacted(supabase, lead_id, user.id, now),
         supabase.from('lead_activities').insert({
           lead_id, type: 'email_sent', user_id: user.id,
           body: `Email sent: "${subject.trim()}"`,
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
       .update({ status: 'sent', subject: finalSubject, body: finalBody, sent_at: now, sent_by: user.id })
       .eq('id', draft_id)
 
-    await supabase.from('leads').update({ last_contacted_at: now }).eq('id', draft.lead_id)
+    await markContacted(supabase, draft.lead_id, user.id, now)
 
     await supabase.from('lead_activities').insert({
       lead_id: draft.lead_id,
