@@ -145,17 +145,21 @@ export default function AnalyticsClient({ leads, activities }: Props) {
         {/* Sources donut */}
         <Card>
           <CardHeader title="Lead sources" subtitle="Where your leads come from" />
-          <div className="px-6 pb-6 flex items-center gap-5">
-            <Donut data={sourceData.map(s => ({ value: s.count, color: s.color }))} total={owners.length} />
-            <div className="flex flex-col gap-2 min-w-0">
+          <div className="px-6 pb-6 flex items-center gap-12">
+            <div className="pl-6 shrink-0">
+              <Donut data={sourceData.map(s => ({ value: s.count, color: s.color }))} total={owners.length} />
+            </div>
+            <div className="flex flex-col gap-3 min-w-0 flex-1">
               {sourceData.map(s => (
-                <div key={s.source} className="flex items-center gap-2 text-[12.5px]">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color }} />
-                  <span className="text-ink-2 font-medium truncate">{sourceLabel(s.source)}</span>
-                  <span className="text-ink-3 font-semibold ml-auto">{s.count}</span>
+                <div key={s.source} className="flex items-center gap-3 text-[14.5px]">
+                  <span className="flex-1 flex items-center justify-end gap-2.5 min-w-0">
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ background: s.color }} />
+                    <span className="text-ink-2 font-medium truncate">{sourceLabel(s.source)}</span>
+                  </span>
+                  <span className="text-ink-3 font-semibold w-4 text-right shrink-0">{s.count}</span>
                 </div>
               ))}
-              {sourceData.length === 0 && <p className="text-[12.5px] text-ink-3 m-0">No leads yet</p>}
+              {sourceData.length === 0 && <p className="text-[14.5px] text-ink-3 m-0">No leads yet</p>}
             </div>
           </div>
         </Card>
@@ -179,58 +183,60 @@ export default function AnalyticsClient({ leads, activities }: Props) {
 // ── Chart primitives (SVG, no deps) ───────────────────────────
 
 function SimpleBars({ data, color }: { data: { label: string; count: number }[]; color: string }) {
-  const H = 150, PAD_B = 22
+  const CHART_H = 130
   const max = Math.max(...data.map(d => d.count), 1)
   return (
-    <svg width="100%" height={H} viewBox={`0 0 300 ${H}`} preserveAspectRatio="none" style={{ overflow: 'visible' }}>
-      {data.map((d, i) => {
-        const w = 300 / data.length
-        const x = i * w
-        const barW = Math.min(30, w * 0.5)
-        const chartH = H - PAD_B - 12
-        const h = d.count > 0 ? Math.max((d.count / max) * chartH, 4) : 0
-        return (
-          <g key={i}>
-            {h > 0 && <rect x={x + w / 2 - barW / 2} y={H - PAD_B - h} width={barW} height={h} rx={4} fill={color} />}
-            {d.count > 0 && (
-              <text x={x + w / 2} y={H - PAD_B - h - 5} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#5d6577" fontFamily="Inter, sans-serif">{d.count}</text>
-            )}
-            <text x={x + w / 2} y={H - 6} textAnchor="middle" fontSize={9.5} fill="#9aa1b0" fontFamily="Inter, sans-serif">{d.label}</text>
-          </g>
-        )
-      })}
-    </svg>
+    <div>
+      <div className="flex items-end gap-1" style={{ height: CHART_H }}>
+        {data.map((d, i) => {
+          const h = d.count > 0 ? Math.max((d.count / max) * CHART_H, 4) : 0
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center justify-end min-w-0">
+              {d.count > 0 && (
+                <span className="text-[10.5px] font-bold mb-1 leading-none" style={{ color: '#5d6577' }}>{d.count}</span>
+              )}
+              <div className="w-full max-w-[30px] rounded-md transition-all" style={{ height: h, background: color }} />
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex gap-1 mt-2">
+        {data.map((d, i) => (
+          <span key={i} className="flex-1 text-center text-[9.5px] leading-none whitespace-nowrap min-w-0" style={{ color: '#9aa1b0' }}>{d.label}</span>
+        ))}
+      </div>
+    </div>
   )
 }
 
 function Donut({ data, total }: { data: { value: number; color: string }[]; total: number }) {
-  const R = 52, STROKE = 16, C = 2 * Math.PI * R
+  const R = 74, STROKE = 24, C = 2 * Math.PI * R
   const sum = data.reduce((s, d) => s + d.value, 0) || 1
   let offset = 0
   return (
-    <svg width={140} height={140} viewBox="0 0 140 140" className="shrink-0">
-      <circle cx={70} cy={70} r={R} fill="none" stroke="#f0ebe1" strokeWidth={STROKE} />
+    <svg width={200} height={200} viewBox="0 0 200 200" className="shrink-0">
+      <circle cx={100} cy={100} r={R} fill="none" stroke="#f0ebe1" strokeWidth={STROKE} />
       {data.map((d, i) => {
         const frac = d.value / sum
         const dash = frac * C
         const el = (
           <circle
             key={i}
-            cx={70} cy={70} r={R}
+            cx={100} cy={100} r={R}
             fill="none"
             stroke={d.color}
             strokeWidth={STROKE}
             strokeDasharray={`${dash} ${C - dash}`}
             strokeDashoffset={-offset}
             strokeLinecap="butt"
-            transform="rotate(-90 70 70)"
+            transform="rotate(-90 100 100)"
           />
         )
         offset += dash
         return el
       })}
-      <text x={70} y={66} textAnchor="middle" fontSize={22} fontWeight={800} fill="#1f2941" fontFamily="Inter, sans-serif">{total}</text>
-      <text x={70} y={84} textAnchor="middle" fontSize={10} fontWeight={600} fill="#9aa1b0" fontFamily="Inter, sans-serif">leads</text>
+      <text x={100} y={95} textAnchor="middle" fontSize={33} fontWeight={800} fill="#1f2941" fontFamily="Inter, sans-serif">{total}</text>
+      <text x={100} y={117} textAnchor="middle" fontSize={14} fontWeight={600} fill="#9aa1b0" fontFamily="Inter, sans-serif">leads</text>
     </svg>
   )
 }

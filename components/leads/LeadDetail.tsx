@@ -18,6 +18,7 @@ import { LEAD_STATUS_LABELS } from '@/lib/types'
 import { STATUS_CONFIG, ORDERED_STATUSES, formatPhone, formatDate, formatDateTime, timeAgo, sourceLabel, leadDisplayName, isPhoneName, cn } from '@/lib/utils'
 import { localTimeToISO } from '@/lib/dates'
 import { Card, CardHeader, Button, Pill, Avatar, Field, Input, Textarea, Modal, Select } from '@/components/ui/kit'
+import ConversationCard from '@/components/leads/ConversationCard'
 
 interface Props {
   lead: Lead
@@ -325,6 +326,9 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
               </div>
             </div>
           </Card>
+
+          {/* Conversation — the lead's inbox, embedded */}
+          <ConversationCard lead={lead} smsMessages={smsMessages} activities={activities} />
         </div>
 
         {/* ── Right: details ── */}
@@ -388,22 +392,6 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
             </Card>
           )}
 
-          {/* Recent texts */}
-          {smsMessages.length > 0 && (
-            <Card className="px-5 py-4">
-              <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0 mb-3">Recent texts</p>
-              <div className="flex flex-col gap-2">
-                {smsMessages.slice(0, 5).map(s => (
-                  <div key={s.id} className="bg-[#f7f4ed] rounded-lg px-3 py-2">
-                    <p className="text-[12.5px] text-ink m-0">{s.body}</p>
-                    <p className="text-[11px] text-ink-3 m-0 mt-0.5">
-                      {s.status === 'failed' ? '⚠ Failed · ' : ''}{timeAgo(s.created_at)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
         </div>
       </div>
 

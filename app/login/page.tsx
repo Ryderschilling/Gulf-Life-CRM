@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Waves } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
@@ -43,12 +42,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#f7f5f0' }}>
       <div className="w-full max-w-[400px]">
-        {/* Logo */}
+        {/* Logo — the real Gulf Life lockup */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white mb-4 shadow-pop" style={{ background: 'linear-gradient(135deg, #c9a96e 0%, #AB9055 55%, #907240 130%)' }}>
-            <Waves size={26} />
-          </div>
-          <h1 className="text-[22px] font-bold text-ink m-0 tracking-tight">Gulf Life CRM</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-dark.png" alt="Gulf Life Concierge" className="w-[168px] h-auto mb-3" />
           <p className="text-[13.5px] text-ink-2 mt-1 m-0">Sign in to your workspace</p>
         </div>
 

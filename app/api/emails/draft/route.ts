@@ -122,6 +122,10 @@ Keep it warm, personal, concise — 3 short paragraphs max. End with an easy nex
         to_name: lead.name,
         subject,
         body,
+        // Snapshot the AI's original so edits made before sending can be
+        // diffed and learned from (see lib/learn.ts).
+        original_subject: subject,
+        original_body: body,
         trigger_type: trigger_type ?? 'manual',
         trigger_context: trigger_context ?? null,
         status: 'pending',

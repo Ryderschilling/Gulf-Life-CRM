@@ -67,6 +67,26 @@ export async function buildAIContext(
     )
   }
 
+  // ── 3b. General learned facts & preferences (global) ─────
+  // company_knowledge + any non-lead-scoped lead_fact memories. Without this
+  // block these types would be saved but NEVER read back into context, so the
+  // AI could "remember" something and then silently never apply it.
+  const { data: knowledgeMemories } = await supabase
+    .from('ai_memories')
+    .select('title, content')
+    .in('type', ['company_knowledge', 'lead_fact'])
+    .is('lead_id', null)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(max_memories)
+
+  if (knowledgeMemories && knowledgeMemories.length > 0) {
+    sections.push('# LEARNED FACTS & PREFERENCES\n' +
+      'Durable things the team has taught you or you\'ve learned. Apply them:\n\n' +
+      knowledgeMemories.map(m => `- ${m.title}: ${m.content}`).join('\n')
+    )
+  }
+
   // ── 4. Lead-specific memories ────────────────────────────
   if (lead_id) {
     const [leadResult, leadMemories] = await Promise.all([

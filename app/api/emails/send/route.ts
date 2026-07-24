@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendEmail, mailerConfigured } from '@/lib/mailer'
+import { learnFromDraftEdit } from '@/lib/learn'
 
 export async function POST(req: NextRequest) {
   try {
@@ -108,6 +109,15 @@ export async function POST(req: NextRequest) {
       .update({ is_completed: true, completed_at: now, is_archived: true, archived_at: now })
       .eq('linked_draft_id', draft_id)
       .eq('is_completed', false)
+
+    // Learn from any edits the rep made before sending. Await it (serverless
+    // freezes after the response, killing background work) but never let a
+    // learn failure break the send — the email already went out.
+    try {
+      await learnFromDraftEdit(supabase, draft_id)
+    } catch (learnErr) {
+      console.error('[POST /api/emails/send] learn step failed:', learnErr)
+    }
 
     return NextResponse.json({ success: true, message_id: sent.id })
   } catch (err) {

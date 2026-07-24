@@ -6,7 +6,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, KanbanSquare, CheckSquare, Inbox, Megaphone, BarChart3, Upload, Settings, LogOut, Waves } from 'lucide-react'
+import { LayoutDashboard, KanbanSquare, CheckSquare, Inbox, Megaphone, BarChart3, Upload, Settings, LogOut } from 'lucide-react'
 import { AIMark } from '@/components/ai/AIMark'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -90,15 +90,10 @@ export default function Sidebar({ profile, pendingTodoCount = 0, segment = 'pros
     <>
       {/* Desktop sidebar */}
       <aside className="sidebar-desktop fixed left-0 top-0 bottom-0 z-[100] w-[232px] bg-navy-deep flex flex-col">
-        {/* Logo */}
-        <div className="px-5 pt-6 pb-5 flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0" style={{ background: GOLD_GRAD }}>
-            <Waves size={18} />
-          </div>
-          <div className="leading-tight">
-            <p className="text-[14px] font-bold text-white m-0 tracking-tight">Gulf Life</p>
-            <p className="text-[11px] font-semibold text-accent-light m-0 uppercase tracking-widest">Concierge</p>
-          </div>
+        {/* Logo — the real Gulf Life lockup (white variant for the navy rail) */}
+        <div className="px-5 pt-7 pb-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-white.png" alt="Gulf Life Concierge" className="w-[118px] h-auto mx-auto block" />
         </div>
 
         {/* Prospect / Client segment toggle */}

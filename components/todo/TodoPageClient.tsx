@@ -1,32 +1,250 @@
 'use client'
 
-// To-Do page — the daily command center:
-//   AI morning briefing · tasks · email drafts to review · follow-ups due
+// ============================================================
+// To-Do page — ONE ranked queue: every single thing that needs
+// attention, in one place. Sources, in priority order:
+//   1. Inbound texts/emails waiting on a reply  ("Needs reply")
+//   2. Briefing priority leads                  (Gulf AI)
+//   3. AI email drafts pending review
+//   4. Leads whose follow-up date has arrived
+//   5. Quick tasks
+// Every row has exactly one action button that opens a focused
+// popup (ActionModals.tsx) which finishes the whole job. When an
+// action completes, the next follow-up is scheduled silently by
+// stage cadence — no questions — so the queue drains itself and
+// refills when leads come due again.
+// ============================================================
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Sun, RefreshCw, Plus, CheckSquare, Mail, CalendarClock, Send, X,
-  ChevronDown, ChevronUp, Copy, ArrowRight, Archive
+  Plus, Mail, Phone, MessageSquare, ChevronDown, ChevronUp,
+  ArrowUpRight, Archive, Check, CheckSquare, Sparkles,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import type { Todo, EmailDraft, Lead, DailyDigest, PriorityLead } from '@/lib/types'
-import { STATUS_CONFIG, formatPhone, timeAgo, leadDisplayName, cn } from '@/lib/utils'
+import type { Todo, EmailDraft, Lead, DailyDigest } from '@/lib/types'
+import { leadDisplayName, timeAgo, cn } from '@/lib/utils'
 import { followUpStatus, daysOverdue } from '@/lib/dates'
-import { Card, CardHeader, Button, Pill, Avatar, Input, EmptyState, Textarea } from '@/components/ui/kit'
+import { Card, Button, Pill, Avatar, Input, EmptyState } from '@/components/ui/kit'
 import { AIMark, AIThinking, AIBadge } from '@/components/ai/AIMark'
+import {
+  TextActionModal, EmailActionModal, CallActionModal, type QueueLead,
+} from './ActionModals'
+
+/** A conversation where the last message is THEIRS — computed server-side. */
+export interface NeedsReplyItem {
+  lead: Lead
+  channel: 'sms' | 'email'
+  body: string
+  at: string
+}
 
 interface Props {
   todos: Todo[]
   drafts: EmailDraft[]
   followUps: Lead[]
+  needsReply: NeedsReplyItem[]
+  priorityLeadRecords: Lead[]
   initialDigest: DailyDigest | null
 }
 
-export default function TodoPageClient({ todos, drafts, followUps, initialDigest }: Props) {
+interface QueueEntry {
+  lead: QueueLead
+  draft: EmailDraft | null
+  isDraftRow: boolean
+}
+
+// ── Build the unified queue ─────────────────────────────────
+
+function inferAction(suggested: string | null, email: string | null, phone: string | null): QueueLead['action'] {
+  const s = (suggested ?? '').toLowerCase()
+  if (s.includes('text') && phone) return 'text'
+  if (s.includes('call') && phone) return 'call'
+  if (s.includes('email') && email) return 'email'
+  if (phone) return 'text'
+  if (email) return 'email'
+  return 'none'
+}
+
+function snippet(text: string, max = 90): string {
+  const t = text.replace(/\s+/g, ' ').trim()
+  return t.length > max ? `${t.slice(0, max)}…` : t
+}
+
+function buildQueue(
+  digest: DailyDigest | null,
+  followUps: Lead[],
+  needsReply: NeedsReplyItem[],
+  priorityLeadRecords: Lead[],
+  drafts: EmailDraft[],
+): { queue: QueueEntry[]; handled: QueueLead[]; extraActionItems: string[] } {
+  const recById = new Map(priorityLeadRecords.map(l => [l.id, l]))
+  const followById = new Map(followUps.map(l => [l.id, l]))
+  const generatedAt = digest?.generated_at ? new Date(digest.generated_at).getTime() : null
+
+  const active: QueueLead[] = []
+  const handled: QueueLead[] = []
+  const takenIds = new Set<string>()
+
+  // 1. Needs reply — they messaged us last; nothing outranks answering.
+  for (const nr of needsReply) {
+    if (takenIds.has(nr.lead.id)) continue
+    takenIds.add(nr.lead.id)
+    const l = nr.lead
+    const preferred: QueueLead['action'] = nr.channel === 'sms'
+      ? (l.phone ? 'text' : l.email ? 'email' : 'none')
+      : (l.email ? 'email' : l.phone ? 'text' : 'none')
+    active.push({
+      lead_id: l.id,
+      name: l.name,
+      email: l.email,
+      phone: l.phone,
+      status: l.status,
+      reason: `${nr.channel === 'sms' ? 'Texted' : 'Emailed'} ${timeAgo(nr.at)}: “${snippet(nr.body)}”`,
+      message: '',
+      urgency: null,
+      overdueDays: null,
+      action: preferred,
+      needsReply: true,
+    })
+  }
+
+  // 2. Briefing priority leads
+  for (const pl of digest?.content?.priority_leads ?? []) {
+    if (takenIds.has(pl.lead_id)) continue
+    takenIds.add(pl.lead_id)
+    const rec = recById.get(pl.lead_id)
+    const fu = followById.get(pl.lead_id)
+    const email = rec?.email ?? pl.lead_email
+    const phone = rec?.phone ?? pl.lead_phone
+    const item: QueueLead = {
+      lead_id: pl.lead_id,
+      name: rec?.name ?? pl.lead_name,
+      email,
+      phone,
+      status: rec?.status ?? pl.current_status,
+      reason: pl.reason,
+      message: pl.suggested_message ?? '',
+      urgency: pl.urgency,
+      overdueDays: fu?.next_follow_up_at ? Math.max(daysOverdue(fu.next_follow_up_at), 0) : null,
+      action: inferAction(pl.suggested_action, email, phone),
+    }
+    // Handled = contacted since the briefing was generated (every popup
+    // action stamps last_contacted_at).
+    const isHandled = !!(
+      generatedAt && rec?.last_contacted_at &&
+      new Date(rec.last_contacted_at).getTime() > generatedAt
+    )
+    ;(isHandled ? handled : active).push(item)
+  }
+
+  // 4. Due follow-ups nothing above already covered
+  for (const l of followUps) {
+    if (takenIds.has(l.id)) continue
+    takenIds.add(l.id)
+    const overdue = followUpStatus(l.next_follow_up_at) === 'overdue'
+    const days = l.next_follow_up_at ? Math.max(daysOverdue(l.next_follow_up_at), 0) : 0
+    active.push({
+      lead_id: l.id,
+      name: l.name,
+      email: l.email,
+      phone: l.phone,
+      status: l.status,
+      reason: overdue
+        ? `Follow-up ${days === 1 ? '1 day' : `${days} days`} overdue`
+        : 'Follow-up due today',
+      message: '',
+      urgency: null,
+      overdueDays: days,
+      action: inferAction(null, l.email, l.phone),
+    })
+  }
+
+  const draftByLead = new Map(drafts.map(d => [d.lead_id, d]))
+
+  const entries: QueueEntry[] = active.map(lead => ({
+    lead,
+    draft: lead.action === 'email' ? (draftByLead.get(lead.lead_id) ?? null) : null,
+    isDraftRow: false,
+  }))
+
+  // 3. Pending AI drafts for leads not already in the queue → their own rows
+  const allIds = new Set([...takenIds, ...handled.map(h => h.lead_id)])
+  for (const d of drafts) {
+    if (allIds.has(d.lead_id)) continue
+    entries.push({
+      isDraftRow: true,
+      draft: d,
+      lead: {
+        lead_id: d.lead_id,
+        name: d.lead?.name ?? d.to_name ?? d.to_email,
+        email: d.to_email,
+        phone: d.lead?.phone ?? null,
+        status: d.lead?.status ?? 'new',
+        reason: d.subject,
+        message: '',
+        urgency: null,
+        overdueDays: null,
+        action: 'email',
+      },
+    })
+  }
+
+  // Importance score — one number, sorted high to low. Replies always win;
+  // after that urgency sets the base and every overdue day adds weight, so a
+  // badly overdue medium lead can climb past a fresh high one.
+  function importanceOf(e: QueueEntry): number {
+    if (e.lead.needsReply) return 10000
+    let score = 0
+    if (e.isDraftRow) score += 500                      // zero-effort win: already written
+    switch (e.lead.urgency) {
+      case 'high': score += 400; break
+      case 'medium': score += 200; break
+      case 'low': score += 80; break
+      default: score += 150                             // follow-up-only rows
+    }
+    score += Math.min(e.lead.overdueDays ?? 0, 14) * 25 // +25/day overdue, capped
+    return score
+  }
+  entries.sort((a, b) => importanceOf(b) - importanceOf(a))
+
+  // Briefing action items that just restate a priority lead are noise — the
+  // lead row IS that action. Only keep the genuinely extra ones.
+  const names = (digest?.content?.priority_leads ?? []).map(p => p.lead_name.toLowerCase()).filter(Boolean)
+  const extraActionItems = (digest?.content?.action_items ?? []).filter(item => {
+    const t = item.toLowerCase()
+    return !names.some(n => t.includes(n))
+  })
+
+  return { queue: entries, handled, extraActionItems }
+}
+
+// ── Page ────────────────────────────────────────────────────
+
+export default function TodoPageClient({ todos, drafts, followUps, needsReply, priorityLeadRecords, initialDigest }: Props) {
+  const router = useRouter()
+  const [digest, setDigest] = useState<DailyDigest | null>(initialDigest)
+  useEffect(() => { setDigest(initialDigest) }, [initialDigest])
+
+  const [active, setActive] = useState<QueueEntry | null>(null)
+
   const openTodos = todos.filter(t => !t.is_completed)
   const doneTodos = todos.filter(t => t.is_completed)
+
+  const { queue, handled, extraActionItems } = useMemo(
+    () => buildQueue(digest, followUps, needsReply, priorityLeadRecords, drafts),
+    [digest, followUps, needsReply, priorityLeadRecords, drafts],
+  )
+
+  const replies = queue.filter(e => e.lead.needsReply)
+  const rest = queue.filter(e => !e.lead.needsReply)
+  const replyCount = replies.length
+  const doneCount = handled.length + doneTodos.length
+  const totalCount = queue.length + openTodos.length + doneCount
+
+  function closeModal() { setActive(null) }
+  function finishModal() { setActive(null); router.refresh() }
 
   return (
     <div>
@@ -34,41 +252,102 @@ export default function TodoPageClient({ todos, drafts, followUps, initialDigest
         <div>
           <h1 className="text-[22px] font-bold text-ink m-0 tracking-tight">To-Do</h1>
           <p className="text-[13.5px] text-ink-2 mt-0.5 m-0">
-            {openTodos.length} task{openTodos.length === 1 ? '' : 's'} · {drafts.length} draft{drafts.length === 1 ? '' : 's'} to review · {followUps.length} follow-up{followUps.length === 1 ? '' : 's'} due
+            {queue.length + openTodos.length === 0
+              ? 'All clear'
+              : `${queue.length + openTodos.length} to go${replyCount > 0 ? ` · ${replyCount} waiting on a reply` : ''}${doneCount > 0 ? ` · ${doneCount} done today` : ''}`}
           </p>
         </div>
       </div>
 
-      <DigestCard initialDigest={initialDigest} />
+      <BriefingStrip digest={digest} onDigest={d => { setDigest(d); router.refresh() }} extraItems={extraActionItems} />
 
-      <div className="grid lg:grid-cols-2 gap-4 mt-4 items-start">
-        <div className="flex flex-col gap-4">
-          <TasksCard openTodos={openTodos} doneTodos={doneTodos} />
-          <FollowUpsCard followUps={followUps} />
+      <Card className="mt-4">
+        {/* Progress */}
+        {totalCount > 0 && (
+          <div className="px-6 pt-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-[16px] font-semibold text-ink m-0">Today&apos;s queue</h2>
+              <span className="text-[12.5px] font-semibold text-ink-3">{doneCount} of {totalCount} done</span>
+            </div>
+            <div className="h-1.5 bg-[#f0ebe1] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-accent rounded-full transition-all duration-500"
+                style={{ width: `${totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Lead + draft rows */}
+        <div className="px-6 pt-4 pb-2 flex flex-col gap-2">
+          {queue.length === 0 && (
+            handled.length > 0 ? (
+              <div className="flex items-center gap-3 bg-good-soft/60 rounded-xl px-4 py-3">
+                <div className="w-8 h-8 rounded-full bg-good text-white flex items-center justify-center shrink-0">
+                  <Check size={16} strokeWidth={3} />
+                </div>
+                <p className="text-[13.5px] text-ink m-0 font-medium">Every lead handled — nice work.</p>
+              </div>
+            ) : (
+              <EmptyState
+                icon={<CheckSquare size={20} />}
+                title="Queue's clear"
+                subtitle="Replies, due follow-ups, and briefing leads all land here the moment they need you."
+              />
+            )
+          )}
+          {replies.length > 0 && (
+            <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0 mt-1">Reply first</p>
+          )}
+          {replies.map(e => (
+            <QueueRow key={e.isDraftRow ? `draft-${e.draft!.id}` : e.lead.lead_id} entry={e} onOpen={() => setActive(e)} />
+          ))}
+          {replies.length > 0 && rest.length > 0 && (
+            <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0 mt-3">Up next</p>
+          )}
+          {rest.map(e => (
+            <QueueRow key={e.isDraftRow ? `draft-${e.draft!.id}` : e.lead.lead_id} entry={e} onOpen={() => setActive(e)} />
+          ))}
         </div>
-        <DraftsCard drafts={drafts} />
-      </div>
+
+        {/* Handled today */}
+        {handled.length > 0 && <HandledSection handled={handled} />}
+
+        {/* Quick tasks */}
+        <TasksSection openTodos={openTodos} doneTodos={doneTodos} />
+      </Card>
+
+      {/* Action popups */}
+      {active && active.lead.action === 'text' && (
+        <TextActionModal key={active.lead.lead_id} lead={active.lead} onClose={closeModal} onDone={finishModal} />
+      )}
+      {active && active.lead.action === 'email' && (
+        <EmailActionModal key={active.lead.lead_id} lead={active.lead} draft={active.draft} onClose={closeModal} onDone={finishModal} />
+      )}
+      {active && active.lead.action === 'call' && (
+        <CallActionModal key={active.lead.lead_id} lead={active.lead} onClose={closeModal} onDone={finishModal} />
+      )}
     </div>
   )
 }
 
-// ════════════════════════════════════════════════════════════
-// DAILY DIGEST
-// ════════════════════════════════════════════════════════════
+// ── Briefing strip (compact) ────────────────────────────────
 
-function DigestCard({ initialDigest }: { initialDigest: DailyDigest | null }) {
+function BriefingStrip({ digest, onDigest, extraItems }: {
+  digest: DailyDigest | null
+  onDigest: (d: DailyDigest) => void
+  extraItems: string[]
+}) {
   const router = useRouter()
-  const [digest, setDigest] = useState<DailyDigest | null>(initialDigest)
   const [loading, setLoading] = useState(false)
-  const [expandedLead, setExpandedLead] = useState<string | null>(null)
 
-  async function generate(force = false) {
+  async function generate(force: boolean) {
     setLoading(true)
     try {
       const res = await fetch('/api/digest', { method: force ? 'POST' : 'GET' })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      setDigest(data.digest)
+      onDigest(data.digest)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not generate briefing')
     } finally {
@@ -76,7 +355,7 @@ function DigestCard({ initialDigest }: { initialDigest: DailyDigest | null }) {
     }
   }
 
-  async function addActionAsTodo(item: string) {
+  async function addAsTask(item: string) {
     const res = await fetch('/api/todos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -89,150 +368,154 @@ function DigestCard({ initialDigest }: { initialDigest: DailyDigest | null }) {
 
   return (
     <Card className="ai-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5 pb-4">
-        <div className="flex items-center gap-3">
-          <AIMark size={36} thinking={loading} />
-          <div>
-            <h2 className="text-[16px] font-semibold text-ink m-0">Today&apos;s Briefing</h2>
-            <p className="text-[13px] text-ink-2 mt-0.5 m-0">Gulf AI reads the whole pipeline and tells you where to focus</p>
-          </div>
+      <div className="flex items-center gap-3.5 px-5 py-4">
+        <AIMark size={34} thinking={loading} breathe={!content} />
+        <div className="min-w-0 flex-1">
+          {loading && !content ? (
+            <AIThinking label="Reading your pipeline…" />
+          ) : content ? (
+            <>
+              <p className="text-[14px] font-semibold text-ink m-0">{content.greeting}</p>
+              {content.summary && <p className="text-[12.5px] text-ink-2 mt-0.5 m-0">{content.summary}</p>}
+            </>
+          ) : (
+            <>
+              <p className="text-[14px] font-semibold text-ink m-0">Today&apos;s Briefing</p>
+              <p className="text-[12.5px] text-ink-2 mt-0.5 m-0">Gulf AI reads the pipeline and lines up who needs you — hit Generate.</p>
+            </>
+          )}
         </div>
-        <Button size="sm" variant="secondary" onClick={() => generate(!!digest)} loading={loading}>
-          {digest ? <><RefreshCw size={13} /> Refresh</> : <><Sun size={14} /> Generate</>}
+        <Button size="sm" variant="secondary" onClick={() => generate(!!digest)} loading={loading} className="shrink-0">
+          {digest ? 'Refresh' : 'Generate'}
         </Button>
       </div>
-
-      {!content && !loading && (
-        <div className="px-6 pb-6">
-          <div className="bg-accent-soft/50 border border-accent/15 rounded-xl px-5 py-4 flex items-center gap-3">
-            <AIMark size={34} breathe />
-            <p className="text-[13.5px] text-ink-2 m-0">
-              Hit <strong className="text-ink">Generate</strong> and Gulf AI builds your morning game plan — who to contact, why, and what to say.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {loading && !content && (
-        <div className="px-6 pb-8">
-          <AIThinking label="Reading your pipeline…" />
-        </div>
-      )}
-
-      {content && (
-        <div className="px-6 pb-6 ai-msg-in">
-          <p className="text-[14.5px] font-semibold text-ink m-0">{content.greeting}</p>
-          {content.summary && <p className="text-[13.5px] text-ink-2 mt-1 m-0">{content.summary}</p>}
-
-          {content.priority_leads.length > 0 && (
-            <div className="flex flex-col gap-2 mt-4">
-              {content.priority_leads.map(pl => (
-                <PriorityLeadRow
-                  key={pl.lead_id}
-                  pl={pl}
-                  expanded={expandedLead === pl.lead_id}
-                  onToggle={() => setExpandedLead(e => e === pl.lead_id ? null : pl.lead_id)}
-                />
-              ))}
-            </div>
-          )}
-
-          {content.action_items.length > 0 && (
-            <div className="mt-4">
-              <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0 mb-2">Also today</p>
-              <div className="flex flex-col gap-1.5">
-                {content.action_items.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2 bg-[#f7f4ed] rounded-lg px-3.5 py-2">
-                    <span className="text-[13px] text-ink">{item}</span>
-                    <button onClick={() => addActionAsTodo(item)} className="text-accent hover:text-accent-dark shrink-0" title="Add as task">
-                      <Plus size={15} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      {extraItems.length > 0 && (
+        <div className="px-5 pb-4 flex flex-wrap gap-1.5 -mt-1">
+          {extraItems.map((item, i) => (
+            <button
+              key={i}
+              onClick={() => addAsTask(item)}
+              title="Add as task"
+              className="inline-flex items-center gap-1.5 bg-[#f7f4ed] hover:bg-[#f0ebe1] text-ink text-[12.5px] font-medium rounded-full px-3 py-1.5 transition-colors"
+            >
+              <Plus size={12} className="text-accent" /> {item}
+            </button>
+          ))}
         </div>
       )}
     </Card>
   )
 }
 
-function PriorityLeadRow({ pl, expanded, onToggle }: { pl: PriorityLead; expanded: boolean; onToggle: () => void }) {
-  const router = useRouter()
-  const [drafting, setDrafting] = useState(false)
+// ── Queue row ───────────────────────────────────────────────
 
-  const urgencyTone = pl.urgency === 'high' ? 'red' : pl.urgency === 'medium' ? 'yellow' : 'gray'
+const ACTION_META: Record<Exclude<QueueLead['action'], 'none'>, { label: string; icon: typeof Mail }> = {
+  text: { label: 'Text', icon: MessageSquare },
+  email: { label: 'Email', icon: Mail },
+  call: { label: 'Call', icon: Phone },
+}
 
-  async function draftIt() {
-    setDrafting(true)
-    try {
-      const res = await fetch('/api/emails/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead_id: pl.lead_id, trigger_type: 'follow_up_due' }),
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      toast.success('Draft ready below')
-      router.refresh()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Draft failed')
-    } finally {
-      setDrafting(false)
-    }
+function QueueRow({ entry, onOpen }: { entry: QueueEntry; onOpen: () => void }) {
+  const { lead, isDraftRow } = entry
+
+  // One pill max — the most important thing about the row, nothing else.
+  const pill = lead.needsReply
+    ? <Pill tone="red" className="text-[10.5px] px-1.5 py-0.5">Needs reply</Pill>
+    : (lead.overdueDays ?? 0) > 0
+      ? <Pill tone="red" className="text-[10.5px] px-1.5 py-0.5">{lead.overdueDays}d overdue</Pill>
+      : isDraftRow
+        ? <Pill tone="indigo" className="text-[10.5px] px-1.5 py-0.5"><Sparkles size={10} /> Draft ready</Pill>
+        : lead.urgency === 'high'
+          ? <Pill tone="red" className="text-[10.5px] px-1.5 py-0.5 uppercase">High</Pill>
+          : lead.overdueDays === 0 && lead.urgency === null
+            ? <Pill tone="yellow" className="text-[10.5px] px-1.5 py-0.5">Due today</Pill>
+            : null
+
+  if (lead.action === 'none') {
+    return (
+      <Link href={`/crm/leads/${lead.lead_id}`} className="no-underline">
+        <div className="flex items-center gap-3 border border-line rounded-xl px-4 py-3 hover:border-accent/40 transition-colors">
+          <Avatar name={lead.name} size={34} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13.5px] font-semibold text-ink m-0 flex items-center gap-2">
+              {leadDisplayName(lead.name)} {pill}
+            </p>
+            <p className="text-[12.5px] text-ink-2 m-0 truncate">{lead.reason} · no contact info</p>
+          </div>
+          <Button size="sm" variant="secondary" className="shrink-0 pointer-events-none">
+            Open lead <ArrowUpRight size={13} />
+          </Button>
+        </div>
+      </Link>
+    )
   }
 
-  function copyMessage() {
-    navigator.clipboard.writeText(pl.suggested_message)
-    toast.success('Copied')
-  }
+  const meta = ACTION_META[lead.action]
+  const Icon = meta.icon
+  const label = lead.needsReply ? 'Reply' : isDraftRow ? 'Review & send' : meta.label
 
   return (
-    <div className="border border-line rounded-xl overflow-hidden">
-      <button onClick={onToggle} className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-[#faf8f2] transition-colors text-left">
-        <Avatar name={pl.lead_name} size={30} />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold text-ink m-0 flex items-center gap-2">
-            {pl.lead_name}
-            <Pill tone={urgencyTone} className="text-[10.5px] px-1.5 py-0.5 uppercase">{pl.urgency}</Pill>
-            <Pill tone={STATUS_CONFIG[pl.current_status]?.tone ?? 'gray'} className="text-[10.5px] px-1.5 py-0.5">
-              {STATUS_CONFIG[pl.current_status]?.label ?? pl.current_status}
-            </Pill>
-          </p>
-          <p className="text-[12.5px] text-ink-2 m-0 truncate">{pl.reason}</p>
-        </div>
-        <span className="text-[12px] font-bold text-accent shrink-0">{pl.suggested_action}</span>
-        {expanded ? <ChevronUp size={15} className="text-ink-3 shrink-0" /> : <ChevronDown size={15} className="text-ink-3 shrink-0" />}
+    <div
+      onClick={onOpen}
+      className="flex items-center gap-3 border border-line rounded-xl px-4 py-3 hover:border-accent/40 hover:bg-[#faf8f2] transition-colors cursor-pointer"
+    >
+      <Avatar name={lead.name} size={34} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13.5px] font-semibold text-ink m-0 flex items-center gap-2">
+          {leadDisplayName(lead.name)} {pill}
+        </p>
+        <p className="text-[12.5px] text-ink-2 m-0 truncate">{lead.reason}</p>
+      </div>
+      <Button size="sm" className="shrink-0" onClick={e => { e.stopPropagation(); onOpen() }}>
+        <Icon size={13} /> {label}
+      </Button>
+      <Link
+        href={`/crm/leads/${lead.lead_id}`}
+        onClick={e => e.stopPropagation()}
+        className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-3 hover:bg-[#f0ebe1] hover:text-ink transition-colors shrink-0"
+        title="Open lead"
+      >
+        <ArrowUpRight size={15} />
+      </Link>
+    </div>
+  )
+}
+
+// ── Handled today ───────────────────────────────────────────
+
+function HandledSection({ handled }: { handled: QueueLead[] }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="px-6 pb-2">
+      <button
+        onClick={() => setShow(s => !s)}
+        className="text-[12px] font-semibold text-ink-3 hover:text-ink flex items-center gap-1"
+      >
+        {show ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        {handled.length} handled today
       </button>
-      {expanded && (
-        <div className="px-4 pb-4 pt-1 bg-[#faf8f2] border-t border-line">
-          <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0 mb-1.5">What to say</p>
-          <p className="text-[13px] text-ink m-0 bg-card border border-line rounded-lg px-3.5 py-3 whitespace-pre-wrap">
-            {pl.suggested_message}
-          </p>
-          <div className="flex flex-wrap gap-2 mt-3">
-            <Button size="sm" variant="secondary" onClick={copyMessage}><Copy size={13} /> Copy</Button>
-            {pl.lead_email && (
-              <Button size="sm" className="ai-btn" onClick={draftIt} loading={drafting}>
-                <AIMark size={14} variant="white" thinking={drafting} /> AI email draft
-              </Button>
-            )}
-            <Link href={`/crm/leads/${pl.lead_id}`} className="no-underline">
-              <Button size="sm" variant="ghost">Open lead <ArrowRight size={13} /></Button>
+      {show && (
+        <div className="flex flex-col gap-1.5 mt-2">
+          {handled.map(l => (
+            <Link key={l.lead_id} href={`/crm/leads/${l.lead_id}`} className="no-underline">
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-[#f7f4ed] transition-colors">
+                <div className="w-[18px] h-[18px] rounded-md bg-good text-white flex items-center justify-center shrink-0">
+                  <Check size={11} strokeWidth={3} />
+                </div>
+                <span className="text-[13px] text-ink-3 line-through">{leadDisplayName(l.name)}</span>
+                <span className="text-[11.5px] text-ink-3">· contacted</span>
+              </div>
             </Link>
-          </div>
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-// ════════════════════════════════════════════════════════════
-// TASKS
-// ════════════════════════════════════════════════════════════
+// ── Quick tasks ─────────────────────────────────────────────
 
-function TasksCard({ openTodos, doneTodos }: { openTodos: Todo[]; doneTodos: Todo[] }) {
+function TasksSection({ openTodos, doneTodos }: { openTodos: Todo[]; doneTodos: Todo[] }) {
   const router = useRouter()
   const [newTask, setNewTask] = useState('')
   const [adding, setAdding] = useState(false)
@@ -303,50 +586,49 @@ function TasksCard({ openTodos, doneTodos }: { openTodos: Todo[]; doneTodos: Tod
   }
 
   return (
-    <Card>
-      <CardHeader
-        title="Tasks"
-        right={doneTodos.length > 0 ? (
-          <Button size="sm" variant="ghost" onClick={archiveDone}><Archive size={13} /> Clear done</Button>
-        ) : undefined}
-      />
-      <div className="px-6 pb-5">
-        <div className="flex gap-2 mb-4">
-          <Input
-            value={newTask}
-            onChange={e => setNewTask(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') addTask() }}
-            placeholder="Add a task…"
-          />
-          <Button onClick={addTask} loading={adding} disabled={!newTask.trim()}><Plus size={15} /></Button>
-        </div>
-
-        {openTodos.length === 0 && doneTodos.length === 0 && (
-          <p className="text-[13px] text-ink-3 text-center py-4 m-0">Nothing here — enjoy it while it lasts</p>
-        )}
-
-        <div className="flex flex-col gap-1">
-          {openTodos.map(t => <TodoRow key={t.id} todo={t} onToggle={() => toggle(t)} />)}
-        </div>
-
+    <div className="border-t border-line mt-3 px-6 pt-4 pb-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[12px] font-bold text-ink-3 uppercase tracking-wide m-0">Quick tasks</p>
         {doneTodos.length > 0 && (
-          <>
-            <button
-              onClick={() => setShowDone(s => !s)}
-              className="text-[12px] font-semibold text-ink-3 hover:text-ink mt-3 flex items-center gap-1"
-            >
-              {showDone ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              {doneTodos.length} completed
-            </button>
-            {showDone && (
-              <div className="flex flex-col gap-1 mt-2">
-                {doneTodos.map(t => <TodoRow key={t.id} todo={t} onToggle={() => toggle(t)} />)}
-              </div>
-            )}
-          </>
+          <Button size="sm" variant="ghost" onClick={archiveDone}><Archive size={13} /> Clear done</Button>
         )}
       </div>
-    </Card>
+
+      <div className="flex gap-2 mb-3">
+        <Input
+          value={newTask}
+          onChange={e => setNewTask(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') addTask() }}
+          placeholder="Add a task…"
+        />
+        <Button onClick={addTask} loading={adding} disabled={!newTask.trim()}><Plus size={15} /></Button>
+      </div>
+
+      {openTodos.length === 0 && doneTodos.length === 0 && (
+        <p className="text-[13px] text-ink-3 text-center py-2 m-0">Nothing here — enjoy it while it lasts</p>
+      )}
+
+      <div className="flex flex-col gap-1">
+        {openTodos.map(t => <TodoRow key={t.id} todo={t} onToggle={() => toggle(t)} />)}
+      </div>
+
+      {doneTodos.length > 0 && (
+        <>
+          <button
+            onClick={() => setShowDone(s => !s)}
+            className="text-[12px] font-semibold text-ink-3 hover:text-ink mt-3 flex items-center gap-1"
+          >
+            {showDone ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {doneTodos.length} completed
+          </button>
+          {showDone && (
+            <div className="flex flex-col gap-1 mt-2">
+              {doneTodos.map(t => <TodoRow key={t.id} todo={t} onToggle={() => toggle(t)} />)}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 
@@ -360,7 +642,7 @@ function TodoRow({ todo, onToggle }: { todo: Todo; onToggle: () => void }) {
           todo.is_completed ? 'bg-good border-good text-white' : 'border-line-strong hover:border-accent'
         )}
       >
-        {todo.is_completed && <CheckSquare size={11} strokeWidth={3} />}
+        {todo.is_completed && <Check size={11} strokeWidth={3} />}
       </button>
       <div className="min-w-0 flex-1">
         <p className={cn('text-[13.5px] m-0', todo.is_completed ? 'text-ink-3 line-through' : 'text-ink')}>
@@ -376,141 +658,5 @@ function TodoRow({ todo, onToggle }: { todo: Todo; onToggle: () => void }) {
         </div>
       </div>
     </div>
-  )
-}
-
-// ════════════════════════════════════════════════════════════
-// EMAIL DRAFTS
-// ════════════════════════════════════════════════════════════
-
-function DraftsCard({ drafts }: { drafts: EmailDraft[] }) {
-  return (
-    <Card>
-      <CardHeader title="Email drafts to review" subtitle="Gulf AI wrote these — edit, then send or dismiss" />
-      <div className="px-6 pb-5 flex flex-col gap-3">
-        {drafts.length === 0 && (
-          <EmptyState
-            icon={<Mail size={20} />}
-            title="No drafts waiting"
-            subtitle='Ask the AI to "draft a follow-up for..." or hit AI Email Draft on any lead.'
-          />
-        )}
-        {drafts.map(d => <DraftRow key={d.id} draft={d} />)}
-      </div>
-    </Card>
-  )
-}
-
-function DraftRow({ draft }: { draft: EmailDraft }) {
-  const router = useRouter()
-  const [expanded, setExpanded] = useState(false)
-  const [subject, setSubject] = useState(draft.subject)
-  const [body, setBody] = useState(draft.body)
-  const [sending, setSending] = useState(false)
-  const [dismissing, setDismissing] = useState(false)
-
-  async function send() {
-    setSending(true)
-    try {
-      const res = await fetch('/api/emails/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft_id: draft.id, subject, body }),
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      toast.success(`Sent to ${draft.to_name ?? draft.to_email}`)
-      router.refresh()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Send failed')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  async function dismiss() {
-    setDismissing(true)
-    try {
-      await fetch('/api/emails/dismiss', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft_id: draft.id }),
-      })
-      router.refresh()
-    } finally {
-      setDismissing(false)
-    }
-  }
-
-  return (
-    <div className="border border-line rounded-xl overflow-hidden">
-      <button onClick={() => setExpanded(e => !e)} className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-[#faf8f2] transition-colors text-left">
-        <div className="w-8 h-8 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
-          <Mail size={14} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold text-ink m-0 truncate">{subject}</p>
-          <p className="text-[12px] text-ink-3 m-0">
-            To {draft.to_name ?? draft.to_email} · {timeAgo(draft.created_at)}
-          </p>
-        </div>
-        {expanded ? <ChevronUp size={15} className="text-ink-3 shrink-0" /> : <ChevronDown size={15} className="text-ink-3 shrink-0" />}
-      </button>
-      {expanded && (
-        <div className="px-4 pb-4 pt-2 bg-[#faf8f2] border-t border-line flex flex-col gap-2.5">
-          <Input value={subject} onChange={e => setSubject(e.target.value)} className="font-semibold" />
-          <Textarea value={body} onChange={e => setBody(e.target.value)} rows={8} className="text-[13px]" />
-          <div className="flex items-center justify-between">
-            <Button size="sm" variant="ghost" onClick={dismiss} loading={dismissing}>
-              <X size={13} /> Dismiss
-            </Button>
-            <Button size="sm" onClick={send} loading={sending}>
-              <Send size={13} /> Send email
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ════════════════════════════════════════════════════════════
-// FOLLOW-UPS DUE
-// ════════════════════════════════════════════════════════════
-
-function FollowUpsCard({ followUps }: { followUps: Lead[] }) {
-  if (followUps.length === 0) return null
-  return (
-    <Card>
-      <CardHeader title="Follow-ups due" subtitle="Owner leads whose follow-up date has arrived" />
-      <div className="px-6 pb-5 flex flex-col gap-2">
-        {followUps.map(lead => {
-          // Same CRM-local calendar rule as Pipeline / Overview (lib/dates.ts):
-          // date < today = overdue, date = today = due today.
-          const overdue = followUpStatus(lead.next_follow_up_at) === 'overdue'
-          const overdueDays = lead.next_follow_up_at ? daysOverdue(lead.next_follow_up_at) : 0
-          return (
-            <Link key={lead.id} href={`/crm/leads/${lead.id}`} className="no-underline">
-              <div className="flex items-center gap-3 border border-line rounded-xl px-4 py-3 hover:border-accent/40 transition-colors">
-                <Avatar name={lead.name} size={32} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13.5px] font-semibold text-ink m-0 flex items-center gap-2">
-                    {leadDisplayName(lead.name)}
-                    <Pill tone={STATUS_CONFIG[lead.status].tone} className="text-[10.5px] px-1.5 py-0.5">
-                      {STATUS_CONFIG[lead.status].label}
-                    </Pill>
-                  </p>
-                  <p className="text-[12px] text-ink-3 m-0">{formatPhone(lead.phone)}</p>
-                </div>
-                <Pill tone={overdue ? 'red' : 'yellow'} className="shrink-0">
-                  <CalendarClock size={12} />
-                  {overdue ? `${overdueDays}d overdue` : 'Due today'}
-                </Pill>
-              </div>
-            </Link>
-          )
-        })}
-      </div>
-    </Card>
   )
 }

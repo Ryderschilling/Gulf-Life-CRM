@@ -16,7 +16,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     supabase.from("lead_activities").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(100),
     supabase.from("lead_notes").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(50),
     supabase.from("lead_addresses").select("*").eq("lead_id", id).order("is_primary", { ascending: false }),
-    supabase.from("sms_messages").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(20),
+    supabase.from("sms_messages").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(100),
     supabase.from("email_drafts").select("*").eq("lead_id", id).eq("status", "pending").order("created_at", { ascending: false }).limit(5),
     getTeam(),
   ]);

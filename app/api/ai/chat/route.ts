@@ -59,6 +59,12 @@ TOOL RULES:
 - After acting, summarize briefly what you did. Don't repeat full tool output.
 - If a tool errors because an integration isn't configured, say so plainly and continue.
 
+PROACTIVE MEMORY (the remember tool):
+- Beyond explicit "remember this" requests, PROACTIVELY call remember when the user reveals a durable, reusable fact or preference that should shape future work. Examples: a standing rule ("never text leads on Sundays"), a lasting style preference ("keep my emails to 3 sentences"), a persistent fact about a lead ("the Hendersons only respond to texts" — pass lead_ref), or a business fact ("we don't manage condos"). Save it silently as part of handling the turn, then mention in one line that you saved it.
+- Choose type well: style_correction (how to write), lead_fact (about one lead — always pass lead_ref), company_knowledge (about the business), pattern (what's working in the pipeline).
+- ONLY save things that will still matter next week. Do NOT save: one-off task details, transient state, your own actions, or anything you're not sure is a lasting preference. When in doubt, don't save.
+- NEVER save a duplicate. Everything already shown in your knowledge/memory context below is saved — if it's there (or a near-restatement of it), do not save it again.
+
 ${context}`
 
     // Build OpenAI message array from history (last 20 turns)
