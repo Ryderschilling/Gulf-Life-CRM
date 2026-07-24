@@ -19,6 +19,7 @@ import { STATUS_CONFIG, ORDERED_STATUSES, formatPhone, formatDate, formatDateTim
 import { localTimeToISO } from '@/lib/dates'
 import { Card, CardHeader, Button, Pill, Avatar, Field, Input, Textarea, Modal, Select } from '@/components/ui/kit'
 import ConversationCard from '@/components/leads/ConversationCard'
+import AiDraftButton from '@/components/ai/AiDraftButton'
 
 interface Props {
   lead: Lead
@@ -407,7 +408,10 @@ export default function LeadDetail({ lead, activities, notes, addresses, smsMess
             autoFocus
           />
           <div className="flex items-center justify-between">
-            <span className="text-[12px] text-ink-3">{smsText.length} characters</span>
+            <div className="flex items-center gap-3">
+              <AiDraftButton leadId={lead.id} channel="sms" onDraft={text => setSmsText(text)} />
+              <span className="text-[12px] text-ink-3">{smsText.length} characters</span>
+            </div>
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => setSmsOpen(false)}>Cancel</Button>
               <Button onClick={sendSms} loading={sendingSms} disabled={!smsText.trim()}>

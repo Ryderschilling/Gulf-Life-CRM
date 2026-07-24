@@ -104,7 +104,7 @@ export default function AIDrawer() {
           onClick={() => setOpen(true)}
           className="ai-orb ai-chip-in fixed bottom-6 right-6 z-[150] w-[54px] h-[54px] rounded-full flex items-center justify-center"
           title="Ask Gulf AI"
-          style={{ bottom: 'max(96px, calc(env(safe-area-inset-bottom) + 100px))' }}
+          style={{ position: 'fixed', right: '20px', bottom: 'max(96px, calc(env(safe-area-inset-bottom) + 100px))', zIndex: 200 }}
         >
           <AIMark size={30} variant="white" />
         </button>
